@@ -6,7 +6,8 @@
     { href: '/playground/api',     label: 'API & Auth' },
     { href: '/playground/plugins', label: 'Plugin System' },
     { href: '/playground/stack',   label: 'Stack Navigation' },
-    // { href: '/playground/bits',  label: 'bits-ui Components' },
+    { href: '/playground/form',    label: 'Form (bits-ui)' },
+    { href: '/playground/dialogs', label: 'Dialogs (bits-ui)' },
   ];
 </script>
 
