@@ -3,8 +3,9 @@
   // Aggiungere qui i link man mano che si creano nuove pagine.
 
   const pages: { href: string; label: string }[] = [
-    // { href: '/playground/api',   label: 'API & Auth' },
-    // { href: '/playground/stack', label: 'Stack Navigation' },
+    { href: '/playground/api',     label: 'API & Auth' },
+    { href: '/playground/plugins', label: 'Plugin System' },
+    { href: '/playground/stack',   label: 'Stack Navigation' },
     // { href: '/playground/bits',  label: 'bits-ui Components' },
   ];
 </script>

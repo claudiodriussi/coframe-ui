@@ -11,7 +11,9 @@ const config = {
       // Path configured in coframe.config.js.
       $plugins: coframe.pluginsDir,
       // Coframe library - separate git repo (src/lib/coframe).
-      $coframe: resolve('src/lib/coframe')
+      $coframe: resolve('src/lib/coframe'),
+      // Project-level app code (outside $lib, e.g. plugin registry).
+      '$app-plugins': resolve('src/app-plugins')
     }
   }
 };
