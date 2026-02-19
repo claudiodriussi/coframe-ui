@@ -1,0 +1,19 @@
+import adapter from '@sveltejs/adapter-auto';
+import { resolve } from 'path';
+import coframe from './coframe.config.js';
+
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
+  kit: {
+    adapter: adapter(),
+    alias: {
+      // Backend plugin components - same dir as server plugins.
+      // Path configured in coframe.config.js.
+      $plugins: coframe.pluginsDir,
+      // Coframe library - separate git repo (src/lib/coframe).
+      $coframe: resolve('src/lib/coframe')
+    }
+  }
+};
+
+export default config;

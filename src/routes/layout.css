@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+
+/* Scan all project sources + external plugin components.
+   NOTE: the plugins path must match coframe.config.js → pluginsDir.
+   It cannot be dynamic here - update manually if the path changes. */
+@source '../**/*.svelte';
+@source '../**/*.ts';
+@source '../../../../coframe/devtest/plugins/**/*.svelte';
+
+@plugin '@tailwindcss/forms';
+@plugin '@tailwindcss/typography';
