@@ -10,7 +10,7 @@
   onMount(() => {
     authStore.checkAuth();
     if (!authStore.isAuthenticated) {
-      goto('/');
+      goto('/login');
     } else {
       ready = true;
     }
