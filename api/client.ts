@@ -1,12 +1,12 @@
 /**
  * Coframe API client — Axios-based, JWT-aware.
  *
- * Features:
- * - Auto-injects Bearer token from localStorage on every request
- * - Handles X-New-Token header: server silently refreshes token every ~20 min
- * - Dispatches 'coframe:unauthorized' on 401 (token expired/invalid)
- * - Compatible with both Flask (data: [...]) and FastAPI (data: { records: [...] })
- * - updateContext() switches tenant/context and stores the new JWT
+ * Design:
+ * - Two dedicated routes handle JWT generation (login, update_context).
+ * - All other operations go through POST /{endpointPrefix}/{op}.
+ * - Auto-injects Bearer token from localStorage on every request.
+ * - Handles X-New-Token header: server silently refreshes token every ~20 min.
+ * - Dispatches 'coframe:unauthorized' on 401 (token expired/invalid).
  */
 
 import axios from 'axios';
@@ -46,7 +46,6 @@ class CoframeAPI {
         const newToken = res.headers['x-new-token'];
         if (newToken) {
           this.setToken(newToken);
-          // Notify the auth store so it can decode the updated payload
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('coframe:token-refreshed', { detail: newToken }));
           }
@@ -65,7 +64,7 @@ class CoframeAPI {
     );
   }
 
-  // ── Token management ─────────────────────────────────────────────────────
+  // ── Token management ──────────────────────────────────────────────────────
 
   getToken(): string | null {
     if (typeof window === 'undefined') return null;
@@ -82,7 +81,7 @@ class CoframeAPI {
     localStorage.removeItem(TOKEN_KEY);
   }
 
-  // ── Authentication ────────────────────────────────────────────────────────
+  // ── Authentication — dedicated routes (server needs SECRET_KEY for JWT) ──
 
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
@@ -120,97 +119,27 @@ class CoframeAPI {
     this.clearToken();
   }
 
-  // ── CRUD ──────────────────────────────────────────────────────────────────
+  // ── Generic endpoint dispatcher — all data operations ─────────────────────
+  //
+  // All Coframe operations (db CRUD, query, read_file, get_type_schema, ...)
+  // go through POST /{endpointPrefix}/{operation}.
+  //
+  // Examples:
+  //   api.endpoint('db', { table: 'User', method: 'get' })
+  //   api.endpoint('db', { table: 'User', method: 'get', id: 1 })
+  //   api.endpoint('db', { table: 'User', method: 'create', data: {...} })
+  //   api.endpoint('db', { table: 'User', method: 'update', id: 1, data: {...} })
+  //   api.endpoint('db', { table: 'User', method: 'delete', id: 1 })
+  //   api.endpoint('query', { format: 'dict', query: { table: 'User', ... } })
+  //   api.endpoint('read_file', { file_path: 'hello.yaml', base_dir: 'data' })
+  //   api.endpoint('get_type_schema', { include_builtin: false })
 
-  async getAll<T>(table: string): Promise<APIResponse<T[]>> {
+  async endpoint<T>(operation: string, data: unknown = {}): Promise<APIResponse<T>> {
     try {
-      const res = await this.client.get<any>(`/db/${table}`);
-      const d = res.data;
-      return {
-        status: d?.status === 'success' ? 'success' : 'error',
-        // FastAPI wraps list in data.records; Flask returns data directly
-        data: d?.data?.records ?? d?.data,
-        message: d?.message
-      };
-    } catch (err: any) {
-      return { status: 'error', message: err.response?.data?.message ?? 'Request failed' };
-    }
-  }
-
-  async getById<T>(table: string, id: number): Promise<APIResponse<T>> {
-    try {
-      const res = await this.client.get<any>(`/db/${table}/${id}`);
-      const d = res.data;
-      return {
-        status: d?.status === 'success' ? 'success' : 'error',
-        data: d?.data?.record ?? d?.data,
-        message: d?.message
-      };
-    } catch (err: any) {
-      return { status: 'error', message: err.response?.data?.message ?? 'Request failed' };
-    }
-  }
-
-  async create<T>(table: string, data: Partial<T>): Promise<APIResponse<T>> {
-    try {
-      const res = await this.client.post<any>(`/db/${table}`, data);
-      const d = res.data;
-      return {
-        status: d?.status === 'success' ? 'success' : 'error',
-        data: d?.data,
-        message: d?.message
-      };
-    } catch (err: any) {
-      return { status: 'error', message: err.response?.data?.message ?? 'Request failed' };
-    }
-  }
-
-  async update<T>(table: string, id: number, data: Partial<T>): Promise<APIResponse<T>> {
-    try {
-      const res = await this.client.put<any>(`/db/${table}/${id}`, data);
-      const d = res.data;
-      return {
-        status: d?.status === 'success' ? 'success' : 'error',
-        data: d?.data,
-        message: d?.message
-      };
-    } catch (err: any) {
-      return { status: 'error', message: err.response?.data?.message ?? 'Request failed' };
-    }
-  }
-
-  async delete(table: string, id: number): Promise<APIResponse<void>> {
-    try {
-      const res = await this.client.delete<any>(`/db/${table}/${id}`);
-      const d = res.data;
-      return {
-        status: d?.status === 'success' ? 'success' : 'error',
-        message: d?.message
-      };
-    } catch (err: any) {
-      return { status: 'error', message: err.response?.data?.message ?? 'Request failed' };
-    }
-  }
-
-  // ── Query & generic endpoint ──────────────────────────────────────────────
-
-  async query<T>(params: unknown): Promise<APIResponse<T[]>> {
-    try {
-      const res = await this.client.post<any>('/query', params);
-      const d = res.data;
-      return {
-        status: d?.status === 'success' ? 'success' : 'error',
-        data: d?.data,
-        message: d?.message
-      };
-    } catch (err: any) {
-      return { status: 'error', message: err.response?.data?.message ?? 'Request failed' };
-    }
-  }
-
-  async endpoint<T>(operation: string, data: unknown): Promise<APIResponse<T>> {
-    try {
-      const res = await this.client.post<any>(`/endpoint/${operation}`, data);
+      const res = await this.client.post<any>(
+        `/${config.api.endpointPrefix}/${operation}`,
+        data
+      );
       const d = res.data;
       return {
         status: d?.status === 'success' ? 'success' : 'error',

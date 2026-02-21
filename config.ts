@@ -4,8 +4,9 @@
  * See .env.example for documentation of available variables.
  */
 
-const apiBase = import.meta.env.VITE_API_BASE_URL ?? '';
-const apiPrefix = import.meta.env.VITE_API_PREFIX ?? 'coframe';
+const apiBase           = import.meta.env.VITE_API_BASE_URL       ?? '';
+const apiPrefix         = import.meta.env.VITE_API_PREFIX         ?? 'coframe';
+const apiEndpointPrefix = import.meta.env.VITE_API_ENDPOINT_PREFIX ?? 'endpoint';
 
 export const config = {
   api: {
@@ -13,6 +14,8 @@ export const config = {
     baseUrl: apiBase,
     // Route prefix matching backend config.yaml → api.prefix
     prefix: apiPrefix,
+    // Endpoint dispatcher prefix matching backend config.yaml → api.endpoint_prefix
+    endpointPrefix: apiEndpointPrefix,
     // Full API root: used by the axios client
     get root(): string {
       return apiBase ? `${apiBase}/${apiPrefix}` : `/${apiPrefix}`;
