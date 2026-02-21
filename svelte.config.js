@@ -1,11 +1,13 @@
-import adapter from '@sveltejs/adapter-auto';
+import adapter from '@sveltejs/adapter-static';
 import { resolve } from 'path';
 import coframe from './coframe.config.js';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
   kit: {
-    adapter: adapter(),
+    adapter: adapter({
+      fallback: 'index.html'   // SPA mode: tutte le route sconosciute → index.html
+    }),
     alias: {
       // Backend plugin components - same dir as server plugins.
       // Path configured in coframe.config.js.

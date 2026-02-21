@@ -42,12 +42,12 @@
   }
 
   async function testListUsers() {
-    const res = await api.getAll('User');
-    add('List Users (GET /db/User)', res.status, res.data ?? res.message);
+    const res = await api.endpoint('db', { table: 'User', method: 'get' });
+    add('List Users (POST /endpoint/db)', res.status, res.data ?? res.message);
   }
 
   async function testQuery() {
-    const res = await api.query({
+    const res = await api.endpoint('query', {
       format: 'dict',
       query: {
         table: 'User',
@@ -56,25 +56,22 @@
         limit: 5
       }
     });
-    add('Query — Active Users', res.status, res.data ?? res.message);
+    add('Query — Active Users (POST /endpoint/query)', res.status, res.data ?? res.message);
   }
 
   async function testReadFile() {
     const res = await api.endpoint('read_file', { file_path: 'hello.yaml', base_dir: 'data' });
-    add('Read File (hello.yaml)', res.status, res.data ?? res.message);
+    add('Read File (POST /endpoint/read_file)', res.status, res.data ?? res.message);
   }
 
   async function testCRUD() {
     const username_test = `test_${Date.now()}`;
+    interface UserRecord { id: number; username: string; password?: string; email: string; is_active: boolean; is_admin: boolean; }
 
     // Create
-    interface UserRecord { id: number; username: string; password?: string; email: string; is_active: boolean; is_admin: boolean; }
-    const created = await api.create<UserRecord>('User', {
-      username: username_test,
-      password: 'test123',
-      email: `${username_test}@example.com`,
-      is_active: true,
-      is_admin: false
+    const created = await api.endpoint<UserRecord>('db', {
+      table: 'User', method: 'create',
+      data: { name: username_test, username: username_test, password: 'test123', email: `${username_test}@example.com`, is_active: true, is_admin: false }
     });
     add('CRUD — Create User', created.status, created.data ?? created.message);
     if (created.status !== 'success' || !(created.data as UserRecord | undefined)?.id) return;
@@ -82,15 +79,15 @@
     const id = (created.data as UserRecord).id;
 
     // Read
-    const read = await api.getById<UserRecord>('User', id);
+    const read = await api.endpoint<UserRecord>('db', { table: 'User', method: 'get', id });
     add('CRUD — Read User', read.status, read.data ?? read.message);
 
     // Update
-    const updated = await api.update('User', id, { email: `updated_${username_test}@example.com` });
+    const updated = await api.endpoint('db', { table: 'User', method: 'update', id, data: { email: `updated_${username_test}@example.com` } });
     add('CRUD — Update User', updated.status, updated.data ?? updated.message);
 
     // Delete
-    const deleted = await api.delete('User', id);
+    const deleted = await api.endpoint('db', { table: 'User', method: 'delete', id });
     add('CRUD — Delete User', deleted.status, deleted.message ?? 'deleted');
   }
 

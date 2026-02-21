@@ -17,9 +17,9 @@
   let error = $state<string | null>(null);
 
   onMount(async () => {
-    const res = await api.getAll<Book>('Book');
+    const res = await api.endpoint<{ records: Book[] }>('db', { table: 'Book', method: 'get' });
     if (res.status === 'success' && res.data) {
-      books = res.data;
+      books = res.data.records;
     } else {
       error = res.message ?? 'Failed to load books';
     }

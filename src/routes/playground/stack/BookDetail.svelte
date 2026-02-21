@@ -27,11 +27,11 @@
   let error = $state<string | null>(null);
 
   onMount(async () => {
-    const bookRes = await api.getById<Book>('Book', bookId);
+    const bookRes = await api.endpoint<Book>('db', { table: 'Book', method: 'get', id: bookId });
     if (bookRes.status === 'success' && bookRes.data) {
       book = bookRes.data;
       if (book.author_id) {
-        const authorRes = await api.getById<Author>('Author', book.author_id);
+        const authorRes = await api.endpoint<Author>('db', { table: 'Author', method: 'get', id: book.author_id });
         if (authorRes.status === 'success') author = authorRes.data ?? null;
       }
     } else {
