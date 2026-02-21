@@ -4,12 +4,12 @@
   import { fly } from 'svelte/transition';
 
   /**
-   * Intercetta il Back del browser (type === 'popstate').
-   * - stack > 1 pagine: cancella la navigazione e fa pop.
-   *   SvelteKit chiama history.go(+1) internamente, così il Back
-   *   successivo torna a farlo scattare.
-   * - stack = 1 (pagina base): lascia passare → SvelteKit naviga via.
-   *   Un solo click Back basta per uscire, nessun entry fake in history.
+   * Intercepts browser Back (type === 'popstate').
+   * - stack > 1 pages: cancels navigation and pops.
+   *   SvelteKit calls history.go(+1) internally, so the next Back
+   *   triggers it again.
+   * - stack = 1 (base page): lets through → SvelteKit navigates away.
+   *   A single Back click is enough to exit, no fake history entries.
    */
   beforeNavigate(({ type, cancel }) => {
     if (type === 'popstate' && stack.length > 1) {

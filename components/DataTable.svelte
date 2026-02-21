@@ -1,32 +1,32 @@
 <script lang="ts">
   /**
-   * DataTable.svelte — wrapper Tabulator.js con interfaccia Svelte 5
+   * DataTable.svelte — Tabulator.js wrapper with Svelte 5 interface
    *
    * Props:
-   *   data           any[]                   righe dati
-   *   columns        ColumnDef[]             definizioni colonne
-   *   selectable     boolean                 colonna checkbox selezione (default: false)
-   *   mode           'virtual' | 'page'      virtual scroll o paginazione locale (default: virtual)
-   *   pageSize       number                  righe per pagina — solo mode='page' (default: 20)
-   *   rowHeight      number                  altezza riga px — utile per virtual scroll (opzionale)
-   *   initialSort    SortDef[]               ordinamento iniziale
+   *   data           any[]                   row data
+   *   columns        ColumnDef[]             column definitions
+   *   selectable     boolean                 checkbox selection column (default: false)
+   *   mode           'virtual' | 'page'      virtual scroll or local pagination (default: virtual)
+   *   pageSize       number                  rows per page — only for mode='page' (default: 20)
+   *   rowHeight      number                  row height in px — useful for virtual scroll (optional)
+   *   initialSort    SortDef[]               initial sort order
    *
-   * Metodi esposti via bind:this:
-   *   download(format, filename?)            scarica CSV o JSON
-   *   setData(data)                          sostituisce i dati
-   *   clearSelection()                       deseleziona tutte le righe
-   *   getSelectedData()                      array righe selezionate
+   * Methods exposed via bind:this:
+   *   download(format, filename?)            download CSV or JSON
+   *   setData(data)                          replace data
+   *   clearSelection()                       deselect all rows
+   *   getSelectedData()                      return selected rows array
    *
-   * Callback:
-   *   onRowClick(rowData)                    click su una riga (non sulla checkbox)
-   *   onCellClick(rowData, field, value)     click su una cella specifica (non sulla checkbox)
-   *   onSelectionChange(rowsData[])          cambio selezione checkbox
-   *   onDataLoaded(count)                    dati caricati o aggiornati
+   * Callbacks:
+   *   onRowClick(rowData)                    click on a row (not on the checkbox)
+   *   onCellClick(rowData, field, value)     click on a specific cell (not on the checkbox)
+   *   onSelectionChange(rowsData[])          checkbox selection change
+   *   onDataLoaded(count)                    data loaded or updated
    */
   import { onMount, onDestroy } from 'svelte';
   import 'tabulator-tables/dist/css/tabulator.min.css';
 
-  // ── Tipi pubblici ──────────────────────────────────────────────────────────
+  // ── Public types ───────────────────────────────────────────────────────────
 
   export interface ColumnDef {
     field: string;
@@ -83,13 +83,13 @@
     onDataLoaded?: (count: number) => void;
   } = $props();
 
-  // ── Stato interno ──────────────────────────────────────────────────────────
+  // ── Internal state ─────────────────────────────────────────────────────────
 
   let container: HTMLDivElement;
   let table: any = null;
   let observer: ResizeObserver | null = null;
 
-  // ── Build config Tabulator ─────────────────────────────────────────────────
+  // ── Tabulator config builder ───────────────────────────────────────────────
 
   function buildColumns(): any[] {
     const cols: any[] = [];
@@ -104,8 +104,8 @@
         minWidth: 44,
         maxWidth: 44,
         frozen: true,
-        // cellClick toglie il doppio evento: il click sulla cella checkbox
-        // gestisce solo la selezione; la riga non scatena onRowClick
+        // cellClick prevents double-firing: clicks on the checkbox cell
+        // handle selection only; the row does not trigger onRowClick
         cellClick: (_e: Event, cell: any) => {
           cell.getRow().toggleSelect();
         },
@@ -139,17 +139,17 @@
     const opts: any = {
       data,
       columns: buildColumns(),
-      // "100%" → Tabulator imposta l'elemento root al 100% del container e
-      // calcola internamente tableHolder = totale - header - footer.
-      // Un valore numerico (px) controllerebbe solo il tableHolder, causando
-      // un overflow che innesca il ResizeObserver → feedback loop → bianco.
+      // "100%" → Tabulator sets the root element to 100% of the container and
+      // internally computes tableHolder = total - header - footer.
+      // A numeric (px) value would control only the tableHolder, causing
+      // overflow that triggers the ResizeObserver → feedback loop → blank screen.
       height: '100%',
       layout: 'fitDataStretch',
       headerSort: true,
       movableColumns: true,
       resizableColumnFit: false,
       selectableRows: selectable ? true : false,
-      placeholder: 'Nessun dato da visualizzare',
+      placeholder: 'No data to display',
     };
 
     if (mode === 'page') {
@@ -175,10 +175,10 @@
 
     table = new TabulatorFull(container, buildOptions());
 
-    // cellClick — intercetta riga e colonna; salta la colonna checkbox (field vuoto)
+    // cellClick — captures row and column; skips the checkbox column (empty field)
     table.on('cellClick', (_e: MouseEvent, cell: any) => {
       const field: string = cell.getField();
-      if (!field) return; // colonna rowSelection non ha field
+      if (!field) return; // rowSelection column has no field
       const row = cell.getRow().getData();
       const value: unknown = cell.getValue();
       onCellClick?.({ field, value, row });
@@ -186,7 +186,7 @@
     });
 
     if (selectable) {
-      // rowSelectionChanged: data = array dati, rows = array RowComponent
+      // rowSelectionChanged: data = data array, rows = RowComponent array
       table.on('rowSelectionChanged', (selectedData: any[]) => {
         onSelectionChange?.(selectedData);
       });
@@ -196,9 +196,9 @@
       onDataLoaded?.(loadedData.length);
     });
 
-    // ResizeObserver: notifica Tabulator dei resize del container (es. SplitPane).
-    // Con height:"100%" il CSS gestisce già l'altezza; redraw(true) aggiorna
-    // le righe visibili nel virtual scroll dopo che il container ha cambiato dimensione.
+    // ResizeObserver: notifies Tabulator of container resizes (e.g. SplitPane).
+    // With height:"100%" CSS already controls the height; redraw(true) updates
+    // visible rows in the virtual scroll after the container changes size.
     observer = new ResizeObserver(() => {
       if (table) table.redraw(true);
     });
@@ -211,10 +211,10 @@
     table = null;
   });
 
-  // ── Reattività props → Tabulator ──────────────────────────────────────────
-  // $effect traccia solo le prop reattive (data, columns); `table` è let normale
-  // quindi non è tracciato — l'effect non ri-scatta quando table viene assegnato
-  // in onMount. Al primo run table è null → no-op. Scatta solo su cambi successivi.
+  // ── Prop reactivity → Tabulator ───────────────────────────────────────────
+  // $effect tracks only reactive props (data, columns); `table` is a plain let
+  // so it is not tracked — the effect does not re-run when table is assigned
+  // in onMount. On the first run table is null → no-op. Fires only on later changes.
 
   $effect(() => {
     if (table && data) table.replaceData(data);
@@ -224,7 +224,7 @@
     if (table && columns) table.setColumns(buildColumns());
   });
 
-  // ── API pubblica (bind:this={ref} → ref.download / ref.setData / ...) ─────
+  // ── Public API (bind:this={ref} → ref.download / ref.setData / ...) ──────
 
   export function download(format: 'csv' | 'json', filename = `export.${format}`) {
     table?.download(format, filename);
@@ -252,7 +252,7 @@
     overflow: hidden;
   }
 
-  /* ── Reset base Tabulator → design system Coframe ─────────────────────── */
+  /* ── Tabulator reset → Coframe design system ───────────────────────────── */
 
   :global(.tabulator) {
     border: 1px solid #e5e7eb;
@@ -296,7 +296,7 @@
     color: #9ca3af;
   }
 
-  /* Righe */
+  /* Rows */
 
   :global(.tabulator-row) {
     border-bottom: 1px solid #f3f4f6;
@@ -325,7 +325,7 @@
     background: #bfdbfe !important;
   }
 
-  /* Celle */
+  /* Cells */
 
   :global(.tabulator-cell) {
     padding: 0.5rem 0.75rem;
@@ -333,19 +333,19 @@
     color: inherit;
   }
 
-  /* Colonna checkbox — riduce il padding laterale */
+  /* Checkbox column — reduce lateral padding */
   :global(.cf-col-select) {
     padding: 0 0.25rem !important;
   }
 
-  /* Scrollbar interna */
+  /* Internal scrollbar */
 
   :global(.tabulator-tableholder) {
     overflow-y: auto;
     overflow-x: auto;
   }
 
-  /* Footer / Paginazione */
+  /* Footer / Pagination */
 
   :global(.tabulator-footer) {
     background: #f9fafb;
@@ -389,7 +389,7 @@
     gap: 0.125rem;
   }
 
-  /* Placeholder dato vuoto */
+  /* Empty data placeholder */
 
   :global(.tabulator-placeholder) {
     display: flex;

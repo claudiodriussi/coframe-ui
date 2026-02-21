@@ -1,26 +1,26 @@
 <script lang="ts">
   /**
-   * SplitPane.svelte — wrapper split.js con collasso e persistenza
+   * SplitPane.svelte — split.js wrapper with collapse and persistence
    *
    * Props:
-   *   direction      'horizontal' | 'vertical'      orientamento (default: 'horizontal')
-   *   defaultSizes   [number, number]                percentuali iniziali (default: [50, 50])
-   *   minSize        number | [number, number]        minimo in px durante il drag (default: 0)
-   *   maxSize        number | [number, number]        massimo in px durante il drag (opzionale)
-   *   gutterSize     number                           spessore gutter in px (default: 6)
-   *   collapseTarget 'a' | 'b'                       quale pannello collassa con il pulsante (default: 'b')
-   *   storageKey     string                           chiave localStorage: "split.{key}" (opzionale)
-   *   a              Snippet                          contenuto pannello A (sinistra/alto)
-   *   b              Snippet                          contenuto pannello B (destra/basso)
+   *   direction      'horizontal' | 'vertical'      orientation (default: 'horizontal')
+   *   defaultSizes   [number, number]                initial percentages (default: [50, 50])
+   *   minSize        number | [number, number]        minimum in px during drag (default: 0)
+   *   maxSize        number | [number, number]        maximum in px during drag (optional)
+   *   gutterSize     number                           gutter thickness in px (default: 6)
+   *   collapseTarget 'a' | 'b'                       which panel collapses with the button (default: 'b')
+   *   storageKey     string                           localStorage key: "split.{key}" (optional)
+   *   a              Snippet                          content of panel A (left/top)
+   *   b              Snippet                          content of panel B (right/bottom)
    *
-   * Comportamento gutter:
-   *   click sul pulsante  → collassa/espande il pannello target
-   *   doppio-click gutter → reset a defaultSizes + rimuove chiave localStorage
+   * Gutter behaviour:
+   *   button click        → collapses/expands the target panel
+   *   double-click gutter → reset to defaultSizes + removes localStorage key
    *
    * localStorage:
-   *   Chiave: "split.{storageKey}"
-   *   Valore: JSON "[40.5, 59.5]" (percentuali, aggiornate ad ogni drag-end)
-   *   Ripristinato al mount. Rimosso dal doppio-click reset.
+   *   Key: "split.{storageKey}"
+   *   Value: JSON "[40.5, 59.5]" (percentages, updated on every drag-end)
+   *   Restored on mount. Removed by double-click reset.
    */
   import Split from 'split.js';
   import { onMount, onDestroy } from 'svelte';
@@ -56,23 +56,23 @@
   let instance:  ReturnType<typeof Split> | null = null;
   let toggleBtn: HTMLButtonElement | null = null;
 
-  // Stato collasso (reattivo per class:cf-pane-collapsed)
+  // Collapse state (reactive for class:cf-pane-collapsed)
   let collapsed = $state(false);
 
-  // Ultime dimensioni prima del collasso (inizializzato in onMount)
+  // Last sizes before collapse (initialised in onMount)
   let savedSizes: [number, number] = [50, 50];
 
-  // — Frecce ——————————————————————————————————————————————————
-  // \uFE0E forza la presentazione testuale dei caratteri Unicode
-  // evitando che il browser li mostri come emoji colorati (es. ▶ arancio).
+  // — Arrows ——————————————————————————————————————————————————
+  // \uFE0E forces text presentation of Unicode characters,
+  // preventing the browser from rendering them as coloured emoji (e.g. orange ▶).
   //
-  // Logica: la freccia punta VERSO il pannello target quando è visibile
-  // (click = collassa) e SI ALLONTANA da esso quando è collassato (click = espandi).
+  // Logic: the arrow points TOWARDS the target panel when it is visible
+  // (click = collapse) and AWAY from it when collapsed (click = expand).
   //
-  // horizontal, target='b': ▶ collassa B a destra  / ◀ espandi B da destra
-  // horizontal, target='a': ◀ collassa A a sinistra / ▶ espandi A da sinistra
-  // vertical,   target='b': ▼ collassa B in basso   / ▲ espandi B dal basso
-  // vertical,   target='a': ▲ collassa A in alto     / ▼ espandi A dall'alto
+  // horizontal, target='b': ▶ collapse B to the right  / ◀ expand B from the right
+  // horizontal, target='a': ◀ collapse A to the left   / ▶ expand A from the left
+  // vertical,   target='b': ▼ collapse B downward       / ▲ expand B from below
+  // vertical,   target='a': ▲ collapse A upward         / ▼ expand A from above
   const arrowCollapse = $derived(
     direction === 'horizontal'
       ? (collapseTarget === 'b' ? '▶\uFE0E' : '◀\uFE0E')
@@ -101,25 +101,25 @@
     if (storageKey) localStorage.removeItem(`split.${storageKey}`);
   }
 
-  // — Sincronizza freccia sul pulsante DOM ———————————————————
+  // — Sync arrow on the DOM button ———————————————————
   function syncArrow() {
     if (!toggleBtn) return;
     toggleBtn.textContent = collapsed ? arrowExpand : arrowCollapse;
-    toggleBtn.title = collapsed ? 'Espandi pannello' : 'Comprimi pannello';
+    toggleBtn.title = collapsed ? 'Expand panel' : 'Collapse panel';
   }
 
-  // — Toggle collasso ————————————————————————————————————————
+  // — Toggle collapse ————————————————————————————————————————
   function toggleCollapse() {
     if (collapsed) {
-      // Ripristina
+      // Restore
       collapsed = false;
       instance?.setSizes(savedSizes);
     } else {
-      // Collassa: salva posizione corrente poi porta il pannello a 0
+      // Collapse: save current position then bring the panel to 0
       savedSizes = (instance?.getSizes() ?? [...defaultSizes]) as [number, number];
       storeSet(savedSizes);
       collapsed = true;
-      // setSizes bypassa minSize → va sempre a 0 indipendentemente dalla prop
+      // setSizes bypasses minSize → always goes to 0 regardless of the prop
       if (collapseTarget === 'a') {
         instance?.setSizes([0, 100]);
       } else {
@@ -129,7 +129,7 @@
     syncArrow();
   }
 
-  // — Reset (doppio click gutter) ————————————————————————————
+  // — Reset (gutter double-click) ————————————————————————————
   function resetSizes() {
     collapsed  = false;
     savedSizes = [...defaultSizes] as [number, number];
@@ -138,7 +138,7 @@
     syncArrow();
   }
 
-  // — Ciclo di vita ——————————————————————————————————————————
+  // — Lifecycle ——————————————————————————————————————————
   onMount(() => {
     const initial = storeGet() ?? [...defaultSizes];
     savedSizes = [...initial] as [number, number];
@@ -148,7 +148,7 @@
       sizes:      initial,
       minSize,
       gutterSize,
-      snapOffset: 0,   // nessuno snap automatico verso minSize durante il drag
+      snapOffset: 0,   // no automatic snap towards minSize during drag
 
       onDragEnd: (sizes) => {
         if (!collapsed) {
@@ -168,7 +168,7 @@
         btn.title = 'Comprimi pannello';
 
         btn.addEventListener('click', (e) => {
-          e.stopPropagation();  // non avviare il drag
+          e.stopPropagation();  // do not start drag
           toggleCollapse();
         });
 

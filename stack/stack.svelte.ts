@@ -1,14 +1,14 @@
 /**
- * Stack navigation — writable store (Svelte 4 store API, funziona in Svelte 5).
+ * Stack navigation — writable store (Svelte 4 store API, works in Svelte 5).
  *
- * Uso:
- *   stack.push(Component, props, onReturn?)  → apre una pagina sopra
- *   stack.pop(returnData?)                   → torna indietro, chiama onReturn con i dati
- *   stack.clear()                            → reset (chiamare nell'onMount cleanup)
- *   stack.subscribe(...)                     → reattività standard store
+ * Usage:
+ *   stack.push(Component, props, onReturn?)  → opens a page on top
+ *   stack.pop(returnData?)                   → goes back, calls onReturn with data
+ *   stack.clear()                            → reset (call in onMount cleanup)
+ *   stack.subscribe(...)                     → standard store reactivity
  *
- * Il browser Back è gestito dalla pagina host con popstate + history.pushState
- * (vedi +page.svelte del playground/stack per il pattern).
+ * Browser Back is handled by the host page with popstate + history.pushState
+ * (see +page.svelte in playground/stack for the pattern).
  */
 
 import { writable } from 'svelte/store';
