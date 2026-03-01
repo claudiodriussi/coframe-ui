@@ -3,25 +3,28 @@
    * DataTable.svelte — Tabulator.js wrapper with Svelte 5 interface
    *
    * Props:
-   *   data           any[]                   row data
-   *   columns        ColumnDef[]             column definitions
-   *   selectable     boolean                 checkbox selection column (default: false)
-   *   mode           'virtual' | 'page'      virtual scroll or local pagination (default: virtual)
-   *   pageSize       number                  rows per page — only for mode='page' (default: 20)
-   *   rowHeight      number                  row height in px — useful for virtual scroll (optional)
-   *   initialSort    SortDef[]               initial sort order
+   *   data             any[]                   row data
+   *   columns          ColumnDef[]             column definitions
+   *   selectable       boolean                 checkbox selection column (default: false)
+   *   mode             'virtual' | 'page'      virtual scroll or local pagination (default: virtual)
+   *   pageSize         number                  rows per page — only for mode='page' (default: 20)
+   *   rowHeight        number                  row height in px — useful for virtual scroll (optional)
+   *   initialSort      SortDef[]               initial sort order
+   *   treeMode         boolean                 enable Tabulator dataTree (nested children array)
+   *   treeChildField   string                  field name for nested children (default: 'children')
+   *   treeStartExpanded boolean                expand all tree nodes on load (default: false)
    *
    * Methods exposed via bind:this:
-   *   download(format, filename?)            download CSV or JSON
-   *   setData(data)                          replace data
-   *   clearSelection()                       deselect all rows
-   *   getSelectedData()                      return selected rows array
+   *   download(format, filename?)              download CSV or JSON
+   *   setData(data)                            replace data
+   *   clearSelection()                         deselect all rows
+   *   getSelectedData()                        return selected rows array
    *
    * Callbacks:
-   *   onRowClick(rowData)                    click on a row (not on the checkbox)
-   *   onCellClick(rowData, field, value)     click on a specific cell (not on the checkbox)
-   *   onSelectionChange(rowsData[])          checkbox selection change
-   *   onDataLoaded(count)                    data loaded or updated
+   *   onRowClick(rowData)                      click on a row (not on the checkbox)
+   *   onCellClick(rowData, field, value)       click on a specific cell (not on the checkbox)
+   *   onSelectionChange(rowsData[])            checkbox selection change
+   *   onDataLoaded(count)                      data loaded or updated
    */
   import { onMount, onDestroy } from 'svelte';
   import 'tabulator-tables/dist/css/tabulator.min.css';
@@ -65,6 +68,9 @@
     pageSize = 20,
     rowHeight = undefined as number | undefined,
     initialSort = [] as SortDef[],
+    treeMode = false,
+    treeChildField = 'children',
+    treeStartExpanded = false,
     onRowClick = undefined as ((row: any) => void) | undefined,
     onCellClick = undefined as ((cell: CellInfo) => void) | undefined,
     onSelectionChange = undefined as ((rows: any[]) => void) | undefined,
@@ -77,6 +83,9 @@
     pageSize?: number;
     rowHeight?: number;
     initialSort?: SortDef[];
+    treeMode?: boolean;
+    treeChildField?: string;
+    treeStartExpanded?: boolean;
     onRowClick?: (row: any) => void;
     onCellClick?: (cell: CellInfo) => void;
     onSelectionChange?: (rows: any[]) => void;
@@ -161,6 +170,12 @@
 
     if (rowHeight) opts.rowHeight = rowHeight;
 
+    if (treeMode) {
+      opts.dataTree = true;
+      opts.dataTreeChildField = treeChildField;
+      opts.dataTreeStartExpanded = treeStartExpanded;
+    }
+
     if (initialSort.length > 0) {
       opts.initialSort = initialSort.map((s) => ({ column: s.field, dir: s.dir }));
     }
@@ -172,6 +187,14 @@
 
   onMount(async () => {
     const { TabulatorFull } = await import('tabulator-tables');
+
+    // Force a synchronous layout reflow so the browser computes the flex/height
+    // chain before Tabulator reads container dimensions. Without this, in nested
+    // flex layouts with height:100%, the container reports offsetHeight=0 during
+    // the microtask that follows `await import()`. Tabulator then sets the
+    // tableholder to 0px (or auto), all rows render at natural height, and the
+    // container's overflow:hidden clips them — no scrollbar, no scroll.
+    void container.offsetHeight;
 
     table = new TabulatorFull(container, buildOptions());
 
@@ -217,11 +240,17 @@
   // in onMount. On the first run table is null → no-op. Fires only on later changes.
 
   $effect(() => {
-    if (table && data) table.replaceData(data);
+    // Read `data` unconditionally so Svelte 5 tracks it even when table is
+    // still null (async onMount with await import hasn't completed yet).
+    const _data = data;
+    if (table) table.replaceData(_data);
   });
 
   $effect(() => {
-    if (table && columns) table.setColumns(buildColumns());
+    // buildColumns() reads `columns` internally — calling it here ensures
+    // the effect is subscribed to `columns` changes regardless of `table`.
+    const cols = buildColumns();
+    if (table) table.setColumns(cols);
   });
 
   // ── Public API (bind:this={ref} → ref.download / ref.setData / ...) ──────
@@ -241,15 +270,26 @@
   export function getSelectedData(): any[] {
     return table?.getSelectedData() ?? [];
   }
+
+  // Append rows to the existing dataset, respecting the current sort order.
+  // Returns the new total row count. Fires onDataLoaded with the updated count.
+  export async function addRows(newRows: any[]): Promise<number> {
+    if (!table) return 0;
+    await table.addData(newRows);
+    const total: number = table.getDataCount();
+    onDataLoaded?.(total);
+    return total;
+  }
 </script>
 
-<div bind:this={container} class="cf-datatable"></div>
+<div bind:this={container} class="cf-datatable" tabindex="-1"></div>
 
 <style>
   .cf-datatable {
     width: 100%;
     height: 100%;
     overflow: hidden;
+    outline: none;
   }
 
   /* ── Tabulator reset → Coframe design system ───────────────────────────── */

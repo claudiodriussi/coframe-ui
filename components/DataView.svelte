@@ -1,0 +1,711 @@
+<script lang="ts">
+  /**
+   * DataView.svelte — descriptor-driven data view (table / tree)
+   *
+   * Reads a view descriptor (from get_panel) and:
+   *  - Fetches data from api.endpoint('query') for source.model
+   *  - Accepts static data via the `data` prop for source.prop
+   *  - Calls a custom endpoint for source.endpoint
+   *  - Maps descriptor columns to DataTable ColumnDef[]
+   *  - Renders a toolbar (Add, Search, Export, Selection, Print)
+   *  - Supports tree mode (type: tree + tree.parent_field for flat→nested)
+   *  - Pagination: initial page + "load more" footer strip (model sources only)
+   *
+   * Props:
+   *   view           ViewDescriptor       resolved view descriptor
+   *   trigger        Record<string,any>   trigger context ($trigger.* substitution — future)
+   *   data           any[]                static data (source: prop)
+   *   onRowClick     (row) => void
+   *   onSelectionChange (rows[]) => void
+   *   onDataLoad     (count) => void
+   */
+  import DataTable from './DataTable.svelte';
+  import type { ColumnDef } from './DataTable.svelte';
+  import { api } from '$coframe/api/client';
+  import { serverConfig } from '$coframe/api/serverConfig.svelte';
+
+  // ── Types ──────────────────────────────────────────────────────────────────
+
+  export interface ViewSource {
+    model?: string;
+    endpoint?: string;
+    joins?: Array<string | Record<string, unknown>>;
+    where?: unknown[];
+    order_by?: string[];
+    group_by?: string[];
+    limit?: number;
+    [key: string]: unknown;
+  }
+
+  export interface ViewColumn {
+    field: string;           // QB select expression or plain field name
+    title?: string;
+    width?: number | string;
+    minWidth?: number;
+    maxWidth?: number;
+    hozAlign?: 'left' | 'center' | 'right';
+    visible?: boolean;
+    frozen?: boolean;
+    [key: string]: unknown;
+  }
+
+  export interface ViewActions {
+    toolbar?: string[];
+    row?: Array<Record<string, unknown>>;
+    commands?: Array<Record<string, unknown>>;
+  }
+
+  export interface ViewPolicy {
+    selection?: boolean;
+    editable?: boolean;
+    user_customizable?: boolean;
+  }
+
+  export interface ViewTreeConfig {
+    parent_field?: string;
+    child_field?: string;
+    start_expanded?: boolean;
+  }
+
+  export interface ViewDescriptor {
+    type: 'table' | 'tree' | string;
+    title?: string;
+    source?: ViewSource;
+    columns?: ViewColumn[];
+    actions?: ViewActions;
+    policy?: ViewPolicy;
+    tree?: ViewTreeConfig;
+    [key: string]: unknown;
+  }
+
+  // ── Constants ──────────────────────────────────────────────────────────────
+
+  // Last-resort fallback if serverConfig hasn't loaded yet or config.yaml has no dataview section.
+  const DEFAULT_PAGE_SIZE = 100;
+  // Batch sizes offered in the "load more" dropdown
+  const LOAD_MORE_OPTIONS = [50, 100, 500];
+
+  // ── Props ──────────────────────────────────────────────────────────────────
+
+  let {
+    view,
+    trigger = {} as Record<string, unknown>,
+    data: propData = undefined as unknown[] | undefined,
+    onRowClick = undefined as ((row: unknown) => void) | undefined,
+    onSelectionChange = undefined as ((rows: unknown[]) => void) | undefined,
+    onDataLoad = undefined as ((count: number) => void) | undefined,
+  }: {
+    view: ViewDescriptor;
+    trigger?: Record<string, unknown>;
+    data?: unknown[];
+    onRowClick?: (row: unknown) => void;
+    onSelectionChange?: (rows: unknown[]) => void;
+    onDataLoad?: (count: number) => void;
+  } = $props();
+
+  // ── Internal state ─────────────────────────────────────────────────────────
+
+  let tableRef: DataTable | null = $state(null);
+  let rows: unknown[] = $state([]);
+  let rowCount = $state(0);
+  let totalCount = $state<number | null>(null);
+  let loading = $state(false);
+  let loadingMore = $state(false);
+  let loadMoreOpen = $state(false);
+  let error = $state<string | null>(null);
+  // Deferred mount: DataTable mounts only after the first data load so that
+  // Tabulator's virtual scroll is initialized with actual data (not empty []).
+  // If it initializes with [], virtual-scroll height is 0 and replaceData()
+  // later does not properly reconfigure the scroll area.
+  let initialized = $state(false);
+
+  // ── Derived ────────────────────────────────────────────────────────────────
+
+  // Rows per page load — cascade:
+  //   1. source.limit in view YAML       (per-view override)
+  //   2. serverConfig.config.page_size   (config.yaml dataview.page_size)
+  //   3. DEFAULT_PAGE_SIZE               (frontend fallback, 100)
+  // Trees always load completely (buildTree needs the full flat list).
+  const pageSize = $derived(
+    view.source?.limit !== undefined
+      ? Number(view.source.limit)
+      : Number(serverConfig.config?.page_size ?? DEFAULT_PAGE_SIZE)
+  );
+
+  // True when the server has more rows than Tabulator currently holds.
+  const hasMore = $derived(
+    view.type !== 'tree' && totalCount !== null && rowCount < totalCount
+  );
+
+  // ── Column mapping ─────────────────────────────────────────────────────────
+  // columns.field may be a plain name ("title"), a Model.field notation
+  // ("Author.first_name"), or a full QB select expression with alias
+  // ("CASE WHEN ... END as display_name"). In the latter case, the Tabulator
+  // field key is the alias (everything after the last " as ").
+
+  function extractFieldKey(expr: string): string {
+    const lower = expr.toLowerCase();
+    const asIdx = lower.lastIndexOf(' as ');
+    if (asIdx !== -1) return expr.slice(asIdx + 4).trim();
+    // "Model.field" → use last segment as field key in row data
+    const dot = expr.lastIndexOf('.');
+    if (dot !== -1) return expr.slice(dot + 1);
+    return expr;
+  }
+
+  const columnDefs = $derived.by((): ColumnDef[] => {
+    if (!view.columns || view.columns.length === 0) return [];
+    return view.columns.map(c => {
+      const def: ColumnDef = {
+        field: extractFieldKey(c.field),
+        title: c.title ?? extractFieldKey(c.field),
+      };
+      if (c.width !== undefined)    def.width = c.width as number | string;
+      if (c.minWidth !== undefined) def.minWidth = c.minWidth;
+      if (c.maxWidth !== undefined) def.maxWidth = c.maxWidth;
+      if (c.hozAlign)               def.hozAlign = c.hozAlign;
+      if (c.visible === false)      def.visible = false;
+      if (c.frozen)                 def.frozen = true;
+      return def;
+    });
+  });
+
+  // ── Query construction ─────────────────────────────────────────────────────
+
+  // Convert descriptor join item to QB-compatible object.
+  function normalizeJoin(j: string | Record<string, unknown>): Record<string, unknown> {
+    if (typeof j === 'string') return { table: j };
+    if (typeof j.table === 'string' && typeof j.on === 'string') {
+      return { [j.table]: j.on };
+    }
+    return j;
+  }
+
+  function buildQuery(src: ViewSource): Record<string, unknown> {
+    const q: Record<string, unknown> = { table: src.model };
+
+    // select: use descriptor column fields (QB select expressions), always include id
+    if (view.columns && view.columns.length > 0) {
+      const fields = view.columns.map(c => c.field);
+      // Prepend 'id' if not already selected (needed for row actions / tree)
+      const hasId = fields.some(f => f === 'id' || extractFieldKey(f) === 'id');
+      if (!hasId) fields.unshift('id');
+      q.select = fields;
+    }
+
+    if (src.joins && src.joins.length > 0) {
+      q.joins = src.joins.map(normalizeJoin);
+    }
+
+    // order_by: "-field" prefix → ["field", "desc"]
+    if (src.order_by && src.order_by.length > 0) {
+      q.order_by = src.order_by.map(f =>
+        typeof f === 'string' && f.startsWith('-') ? [f.slice(1), 'desc'] : f
+      );
+    }
+
+    if (src.group_by && src.group_by.length > 0) {
+      q.group_by = src.group_by;
+    }
+
+    // NOTE: limit is NOT forwarded from src.limit here.
+    // It is applied in loadData() / loadMore() as the pagination page size.
+    // TODO: where with $trigger.* / $props.* / $ctx.* substitution
+    return q;
+  }
+
+  // ── Flat → nested tree conversion ─────────────────────────────────────────
+
+  function buildTree(
+    flat: unknown[],
+    parentField: string,
+    childField = 'children',
+  ): unknown[] {
+    const map = new Map<unknown, Record<string, unknown>>();
+    const roots: Record<string, unknown>[] = [];
+
+    for (const item of flat) {
+      const row = { ...(item as Record<string, unknown>), [childField]: [] };
+      map.set(row.id, row);
+    }
+    for (const row of map.values()) {
+      const parentId = row[parentField];
+      if (parentId != null && map.has(parentId)) {
+        (map.get(parentId)![childField] as unknown[]).push(row);
+      } else {
+        roots.push(row);
+      }
+    }
+    return roots;
+  }
+
+  // ── Data loading ───────────────────────────────────────────────────────────
+
+  async function loadData() {
+    // Read ALL reactive deps synchronously (before first await) so that
+    // $effect can correctly track them and re-run on any change.
+    const src = view.source;
+    void view.columns;              // track columns for $effect reactivity
+    const pd = propData;
+    void trigger;                   // track trigger for future where substitution
+    const viewType = view.type;
+    const treeCfg = view.tree;
+    const _ps = pageSize;           // track: re-runs if source.limit changes
+
+    // Reset server-side total on every fresh load
+    totalCount = null;
+
+    // source: prop — use passed data directly (no pagination)
+    if (pd !== undefined) {
+      rows = pd;
+      initialized = true;
+      return;
+    }
+
+    // source: model — query via DynamicQueryBuilder with pagination
+    if (src?.model) {
+      const q = buildQuery(src);
+
+      loading = true;
+      error = null;
+      try {
+        if (viewType === 'tree') {
+          // Trees need the full flat list for buildTree — no limit/offset
+          const res = await api.endpoint('query', { format: 'records', query: q });
+          if (res.status === 'success') {
+            let data = Array.isArray(res.data) ? res.data : [];
+            if (treeCfg?.parent_field) {
+              data = buildTree(data, treeCfg.parent_field, treeCfg.child_field ?? 'children');
+            }
+            rows = data;
+          } else {
+            error = res.message ?? 'Query failed';
+            rows = [];
+          }
+        } else {
+          // Paginated load: first page + total count
+          q.limit = _ps;
+          q.offset = 0;
+          const res = await api.endpoint('query', { format: 'records', query: q, count: true });
+          if (res.status === 'success') {
+            const d = res.data as { records: unknown[]; total: number };
+            rows = Array.isArray(d.records) ? d.records : [];
+            totalCount = d.total ?? null;
+          } else {
+            error = res.message ?? 'Query failed';
+            rows = [];
+          }
+        }
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e);
+        rows = [];
+      } finally {
+        loading = false;
+        initialized = true;
+      }
+      return;
+    }
+
+    // source: endpoint — custom endpoint (no pagination)
+    if (src?.endpoint) {
+      loading = true;
+      error = null;
+      try {
+        const params = (src.params as Record<string, unknown>) ?? {};
+        const res = await api.endpoint(src.endpoint, params);
+        if (res.status === 'success') {
+          rows = Array.isArray(res.data) ? res.data : [];
+        } else {
+          error = res.message ?? 'Endpoint call failed';
+          rows = [];
+        }
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e);
+        rows = [];
+      } finally {
+        loading = false;
+        initialized = true;
+      }
+      return;
+    }
+
+    rows = [];
+    initialized = true;
+  }
+
+  // Load additional rows and append them to Tabulator, preserving scroll and sort.
+  // n = rows to fetch; n === 0 means no limit (load all remaining from server).
+  async function loadMore(n: number) {
+    if (!tableRef || loadingMore || !hasMore) return;
+    loadMoreOpen = false;
+    const src = view.source;
+    if (!src?.model) return;
+
+    const q = buildQuery(src);
+    q.offset = rowCount;          // start after rows already in Tabulator
+    if (n > 0) q.limit = n;      // omitting limit → QB returns all from offset
+
+    loadingMore = true;
+    try {
+      const res = await api.endpoint('query', { format: 'records', query: q });
+      if (res.status === 'success') {
+        const newData = Array.isArray(res.data) ? res.data : [];
+        if (newData.length > 0) {
+          // addRows appends to Tabulator and fires onDataLoaded with new count.
+          // Cast needed until the TS language server refreshes the component type.
+          await (tableRef as any).addRows(newData);
+        }
+      }
+    } catch (_e) {
+      // loadMore errors are non-fatal — existing data remains intact
+    } finally {
+      loadingMore = false;
+    }
+  }
+
+  $effect(() => { loadData(); });
+
+  // ── Derived UI state ───────────────────────────────────────────────────────
+
+  const toolbarItems = $derived(view.actions?.toolbar ?? []);
+  const selectable = $derived(view.policy?.selection === true);
+  const isTreeMode = $derived(view.type === 'tree');
+  const treeChildField = $derived(view.tree?.child_field ?? 'children');
+  const treeStartExpanded = $derived(view.tree?.start_expanded ?? false);
+
+  // ── Toolbar actions ────────────────────────────────────────────────────────
+
+  function handleExport() {
+    const name = (view.source?.model ?? view.title ?? 'export').toLowerCase();
+    tableRef?.download('csv', `${name}.csv`);
+  }
+
+  // ── Internal callbacks ─────────────────────────────────────────────────────
+
+  function handleDataLoaded(count: number) {
+    rowCount = count;
+    onDataLoad?.(count);
+  }
+</script>
+
+<div class="cf-dataview">
+
+  <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
+  <div class="cf-dv-toolbar">
+    <div class="cf-dv-toolbar-left">
+
+      {#if toolbarItems.includes('add')}
+        <button class="cf-dv-btn" title="Add" disabled>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="cf-dv-icon" aria-hidden="true">
+            <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/>
+          </svg>
+          Add
+        </button>
+      {/if}
+
+      {#if toolbarItems.includes('search')}
+        <button class="cf-dv-btn" title="Search" disabled>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="cf-dv-icon" aria-hidden="true">
+            <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clip-rule="evenodd"/>
+          </svg>
+          Search
+        </button>
+      {/if}
+
+      {#if toolbarItems.includes('selection')}
+        <button class="cf-dv-btn" title="Selection / Filters" disabled>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="cf-dv-icon" aria-hidden="true">
+            <path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 9 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L3.659 6.22A2.25 2.25 0 0 1 3 4.629V2.34a.75.75 0 0 1 .628-.74Z" clip-rule="evenodd"/>
+          </svg>
+          Selection
+        </button>
+      {/if}
+
+      {#if toolbarItems.includes('export')}
+        <button class="cf-dv-btn" title="Export CSV" onclick={handleExport}>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="cf-dv-icon" aria-hidden="true">
+            <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/>
+            <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/>
+          </svg>
+          Export
+        </button>
+      {/if}
+
+      {#if toolbarItems.includes('print')}
+        <button class="cf-dv-btn" title="Print" disabled>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="cf-dv-icon" aria-hidden="true">
+            <path fill-rule="evenodd" d="M5 2.75C5 1.784 5.784 1 6.75 1h6.5c.966 0 1.75.784 1.75 1.75v3.552c.377.046.752.097 1.126.153A2.212 2.212 0 0 1 18 8.653v4.097A2.25 2.25 0 0 1 15.75 15h-.241l.305 1.984A1.75 1.75 0 0 1 14.084 19H5.915a1.75 1.75 0 0 1-1.73-2.016L4.492 15H4.25A2.25 2.25 0 0 1 2 12.75V8.653c0-1.082.775-2.034 1.874-2.198.374-.056.749-.107 1.126-.153V2.75Zm1.5 0v3.44a41.892 41.892 0 0 1 7 0V2.75a.25.25 0 0 0-.25-.25h-6.5a.25.25 0 0 0-.25.25Zm-.875 8.5a.75.75 0 0 0 0 1.5h8.75a.75.75 0 0 0 0-1.5H5.625ZM6 15.25a.75.75 0 0 1 .75-.75h6.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/>
+          </svg>
+          Print
+        </button>
+      {/if}
+
+    </div>
+
+    <div class="cf-dv-toolbar-right">
+      {#if loading}
+        <div class="cf-dv-spinner" aria-label="Loading"></div>
+      {/if}
+      <span class="cf-dv-count">
+        {#if totalCount !== null}
+          {rowCount} / {totalCount} righe
+        {:else}
+          {rowCount} righe
+        {/if}
+      </span>
+    </div>
+  </div>
+
+  <!-- ── Data body ───────────────────────────────────────────────────────── -->
+  <div class="cf-dv-body">
+    {#if error}
+      <div class="cf-dv-error">
+        <svg viewBox="0 0 20 20" fill="currentColor" style="width:1.25rem;height:1.25rem;flex-shrink:0" aria-hidden="true">
+          <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd"/>
+        </svg>
+        {error}
+      </div>
+    {:else if initialized}
+      <DataTable
+        bind:this={tableRef}
+        data={rows}
+        columns={columnDefs}
+        selectable={selectable}
+        treeMode={isTreeMode}
+        treeChildField={treeChildField}
+        treeStartExpanded={treeStartExpanded}
+        onRowClick={onRowClick}
+        onSelectionChange={onSelectionChange}
+        onDataLoaded={handleDataLoaded}
+      />
+    {/if}
+  </div>
+
+  <!-- ── Pagination footer — visible only when more rows exist on server ── -->
+  {#if hasMore || loadingMore}
+
+    <!-- Transparent overlay: closes dropdown when clicking outside it -->
+    {#if loadMoreOpen}
+      <div class="cf-loadmore-overlay" role="presentation" onclick={() => loadMoreOpen = false}></div>
+    {/if}
+
+    <div class="cf-dv-footer">
+      <span class="cf-dv-footer-info">
+        {rowCount} di {totalCount} righe caricate
+      </span>
+
+      <div class="cf-loadmore-wrap">
+        <button
+          class="cf-dv-btn cf-loadmore-btn"
+          onclick={() => loadMoreOpen = !loadMoreOpen}
+          disabled={loadingMore}
+          title="Carica altre righe"
+        >
+          {#if loadingMore}
+            <div class="cf-dv-spinner" aria-hidden="true"></div>
+            Caricamento…
+          {:else}
+            Carica altro
+            <svg viewBox="0 0 20 20" fill="currentColor" class="cf-dv-icon" aria-hidden="true">
+              <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.168l3.71-3.938a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd"/>
+            </svg>
+          {/if}
+        </button>
+
+        {#if loadMoreOpen}
+          <div class="cf-loadmore-menu" role="menu">
+            {#each LOAD_MORE_OPTIONS as n (n)}
+              <button class="cf-loadmore-item" role="menuitem" onclick={() => loadMore(n)}>
+                Carica {n} righe
+              </button>
+            {/each}
+            <div class="cf-loadmore-sep" role="separator"></div>
+            <button class="cf-loadmore-item" role="menuitem" onclick={() => loadMore(0)}>
+              Carica tutto
+            </button>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
+</div>
+
+<style>
+  .cf-dataview {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* ── Toolbar ─────────────────────────────────────────────────────────── */
+
+  .cf-dv-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.3rem 0.625rem;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+    flex-shrink: 0;
+    gap: 0.5rem;
+    min-height: 2rem;
+  }
+
+  .cf-dv-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .cf-dv-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .cf-dv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.3rem;
+    background: #ffffff;
+    color: #374151;
+    font-size: 0.72rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+    appearance: none;
+    line-height: 1.4;
+  }
+
+  .cf-dv-btn:hover:not(:disabled) {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+
+  .cf-dv-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .cf-dv-icon {
+    width: 0.8rem;
+    height: 0.8rem;
+    flex-shrink: 0;
+  }
+
+  .cf-dv-spinner {
+    width: 0.8rem;
+    height: 0.8rem;
+    border: 2px solid #e5e7eb;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: cf-spin 0.6s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes cf-spin { to { transform: rotate(360deg); } }
+
+  .cf-dv-count {
+    font-size: 0.68rem;
+    color: #9ca3af;
+    white-space: nowrap;
+  }
+
+  /* ── Body ────────────────────────────────────────────────────────────── */
+
+  .cf-dv-body {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .cf-dv-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 100%;
+    color: #dc2626;
+    font-size: 0.8rem;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  /* ── Pagination footer ───────────────────────────────────────────────── */
+
+  .cf-dv-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.3rem 0.625rem;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    flex-shrink: 0;
+    gap: 0.5rem;
+    min-height: 2rem;
+  }
+
+  .cf-dv-footer-info {
+    font-size: 0.68rem;
+    color: #6b7280;
+    white-space: nowrap;
+  }
+
+  /* ── Load-more dropdown ──────────────────────────────────────────────── */
+
+  .cf-loadmore-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+  }
+
+  .cf-loadmore-wrap {
+    position: relative;
+  }
+
+  .cf-loadmore-btn {
+    gap: 0.3rem;
+  }
+
+  .cf-loadmore-menu {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    min-width: 10rem;
+    z-index: 11;
+    overflow: hidden;
+  }
+
+  .cf-loadmore-item {
+    display: block;
+    width: 100%;
+    padding: 0.4rem 0.75rem;
+    text-align: left;
+    font-size: 0.75rem;
+    color: #374151;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .cf-loadmore-item:hover {
+    background: #f3f4f6;
+  }
+
+  .cf-loadmore-sep {
+    height: 1px;
+    background: #e5e7eb;
+    margin: 0.2rem 0;
+  }
+</style>
