@@ -2,12 +2,16 @@
   let { children } = $props();
 </script>
 
-<div class="min-h-screen bg-gray-50">
-  <header class="border-b border-gray-200 bg-white px-6 py-3">
+<!-- h-screen flex-col: content area fills the remaining viewport so that child
+     pages can use h-full to get a stable, non-scrolling height for panels/tables. -->
+<div class="flex h-screen flex-col bg-gray-50">
+  <header class="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-3">
     <span class="text-sm font-medium text-gray-500">🧪 Playground</span>
     <span class="ml-2 text-xs text-gray-300">(dev only — not linked from the app)</span>
   </header>
-  <div class="p-6">
+  <!-- overflow-auto: pages that need scrolling (api, form, datatable…) work as before;
+       pages that use h-full (panels) fill this area without the page scrolling. -->
+  <div class="flex-1 min-h-0 overflow-auto p-6">
     {@render children()}
   </div>
 </div>

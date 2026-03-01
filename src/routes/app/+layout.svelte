@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { authStore } from '$coframe/auth/store.svelte';
+  import { serverConfig } from '$coframe/api/serverConfig.svelte';
 
   let { children } = $props();
 
@@ -12,6 +13,9 @@
     if (!authStore.isAuthenticated) {
       goto('/login');
     } else {
+      // Load server config + type schema once before any panel renders.
+      // No-op on subsequent mounts (singleton store, loaded flag).
+      serverConfig.load();
       ready = true;
     }
   });

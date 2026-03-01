@@ -11,6 +11,7 @@
     { href: '/playground/split',   label: 'SplitPane' },
     { href: '/playground/types',    label: 'Type Schema' },
     { href: '/playground/datatable', label: 'DataTable' },
+    { href: '/playground/panels',   label: 'Panel Renderer' },
   ];
 </script>
 
