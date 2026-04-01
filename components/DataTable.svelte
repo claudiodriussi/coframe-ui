@@ -103,33 +103,6 @@
   let tableReady = false;   // true only after Tabulator fires 'tableBuilt'
   let observer: ResizeObserver | null = null;
 
-  // Manual selection — plain JS Set (not reactive), updated via row reformat.
-  // We bypass Tabulator's selectableRows API entirely to avoid its row-click
-  // single-select behavior. The checkbox formatter reads this Set each time
-  // a row is rendered; cellClick toggles the id and calls row.reformat().
-  const _sel = new Set<unknown>();
-
-  function _selToggle(id: unknown, t: any) {
-    if (_sel.has(id)) _sel.delete(id); else _sel.add(id);
-    _updateHeaderCb();
-    onSelectionChange?.(t.getData().filter((d: any) => _sel.has(d.id)));
-  }
-
-  function _selClear() {
-    _sel.clear();
-    _updateHeaderCb();
-  }
-
-  function _updateHeaderCb() {
-    if (!container) return;
-    const cb = container.querySelector<HTMLInputElement>('.cf-col-select .tabulator-col-title input');
-    if (!cb) return;
-    const rows = table?.getRows('active') ?? [];
-    const n = rows.filter((r: any) => _sel.has(r.getData().id)).length;
-    cb.checked = rows.length > 0 && n === rows.length;
-    cb.indeterminate = n > 0 && n < rows.length;
-  }
-
   // ── Keyboard navigation ────────────────────────────────────────────────────
   // Plain variables (not reactive) — we manage the DOM class directly.
   // activeRow:   RowComponent reference for getNextRow/getPrevRow via display order
@@ -150,7 +123,16 @@
   }
 
   function handleKeyNav(e: KeyboardEvent) {
-    if (!table || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    if (!table) return;
+
+    // Space — toggle checkbox on active row (only in select mode)
+    if (e.key === ' ' && selectable && activeRow) {
+      e.preventDefault();
+      activeRow.toggleSelect();
+      return;
+    }
+
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
 
     const displayRows: any[] = table.getRows('active') ?? [];
@@ -182,33 +164,11 @@
 
     if (selectable) {
       cols.push({
-        // Custom formatter: renders a checkbox whose state mirrors _sel.
-        // pointer-events:none lets clicks fall through to the cell, so
-        // cellClick is the single handler (no double-fire with checkbox).
-        formatter: (cell: any) => {
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.checked = _sel.has(cell.getRow().getData().id);
-          cb.style.cssText = 'cursor:pointer;margin:0;pointer-events:none';
-          return cb;
-        },
-        // Header: "select all visible rows" checkbox with indeterminate state.
-        titleFormatter: (cell: any) => {
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.style.cssText = 'cursor:pointer;margin:0';
-          cb.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const t = cell.getTable();
-            const rows = t.getRows('active');
-            const allOn = rows.length > 0 && rows.every((r: any) => _sel.has(r.getData().id));
-            rows.forEach((r: any) => allOn ? _sel.delete(r.getData().id) : _sel.add(r.getData().id));
-            t.redraw();
-            _updateHeaderCb();
-            onSelectionChange?.(t.getData().filter((d: any) => _sel.has(d.id)));
-          });
-          return cb;
-        },
+        // rowSelection formatter handles checkbox rendering and toggleSelect()
+        // internally, with e.stopPropagation() so row-level click doesn't fire.
+        // We do NOT add a custom cellClick here — that was causing double-toggle.
+        formatter: 'rowSelection',
+        titleFormatter: 'rowSelection',
         hozAlign: 'center',
         headerHozAlign: 'center',
         headerSort: false,
@@ -216,10 +176,6 @@
         minWidth: 44,
         maxWidth: 44,
         frozen: true,
-        cellClick: (_e: Event, cell: any) => {
-          _selToggle(cell.getRow().getData().id, cell.getTable());
-          cell.getRow().reformat();
-        },
         cssClass: 'cf-col-select',
       });
     }
@@ -263,6 +219,7 @@
       headerSort: true,
       movableColumns: true,
       resizableColumnFit: false,
+      selectableRows: selectable ? true : false,
       placeholder: 'No data to display',
       scrollToRowPosition: 'nearest',
       scrollToRowIfVisible: false,  // false = skip scroll when row is already visible
@@ -311,13 +268,39 @@
       if (!field) return; // rowSelection column has no field
       const rowComp = cell.getRow();
       onCellClick?.({ field, value: cell.getValue(), row: rowComp.getData() });
-      setActiveRow(rowComp); // updates activeRow + fires onRowClick
+      setActiveRow(rowComp);
     });
+
+    if (selectable) {
+      // rowMouseDown fires before Tabulator processes the click, so we can
+      // snapshot the current selection before a data-cell click clears it.
+      let _savedSel: any[] = [];
+      let _restoringsel = false;
+
+      table.on('rowMouseDown', (_e: MouseEvent, _row: any) => {
+        _savedSel = table.getSelectedData();
+      });
+
+      // rowClick fires after Tabulator has already single-selected the clicked row.
+      // Skip if the click came from the checkbox column; otherwise restore the
+      // pre-click selection so that data-cell clicks don't affect checkboxes.
+      table.on('rowClick', (e: MouseEvent, _row: any) => {
+        if ((e.target as HTMLElement)?.closest('.cf-col-select')) return;
+        _restoringsel = true;
+        table.deselectRow();
+        _savedSel.forEach((d: any) => table.selectRow(d.id));
+        _restoringsel = false;
+      });
+
+      table.on('rowSelectionChanged', (selectedData: any[]) => {
+        if (_restoringsel) return;
+        onSelectionChange?.(selectedData);
+      });
+    }
 
     table.on('dataLoaded', (loadedData: any[]) => {
       activeRow = null;
       activeRowId = null;
-      _selClear();
       onDataLoaded?.(loadedData.length);
     });
 
@@ -392,9 +375,7 @@
   }
 
   export function clearSelection() {
-    _selClear();
-    table?.redraw();
-    onSelectionChange?.([]);
+    table?.deselectRow();
   }
 
   export function clearHeaderFilter() {
@@ -402,7 +383,7 @@
   }
 
   export function getSelectedData(): any[] {
-    return (table?.getData() ?? []).filter((d: any) => _sel.has(d.id));
+    return table?.getSelectedData() ?? [];
   }
 
   // Append rows to the existing dataset, respecting the current sort order.
@@ -497,7 +478,7 @@
     background: inherit !important;
   }
 
-  /* Active row — keyboard navigation highlight (same palette as selected) */
+  /* Active row — keyboard navigation highlight */
   :global(.tabulator-row.cf-row-active),
   :global(.tabulator-row.tabulator-row-even.cf-row-active) {
     background: #dbeafe !important;
@@ -514,11 +495,6 @@
     padding: 0.5rem 0.75rem;
     border-right: none;
     color: inherit;
-  }
-
-  /* Checkbox column — reduce lateral padding */
-  :global(.cf-col-select) {
-    padding: 0 0.25rem !important;
   }
 
   /* Header filter inputs — style when visible (rendered only when filterMode=true) */
