@@ -11,7 +11,10 @@
     { href: '/playground/split',   label: 'SplitPane' },
     { href: '/playground/types',    label: 'Type Schema' },
     { href: '/playground/datatable', label: 'DataTable' },
-    { href: '/playground/panels',   label: 'Panel Renderer' },
+    { href: '/playground/triggers',   label: 'Trigger System' },
+    { href: '/playground/panels',    label: 'Panel Renderer' },
+    { href: '/playground/panels2',   label: 'Panel Multi-Split' },
+    { href: '/playground/panels3',   label: 'Panel Nested Splits' },
   ];
 </script>
 
