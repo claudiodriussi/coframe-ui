@@ -10,14 +10,14 @@
    *  - Renders a toolbar (Add, Search, Export, Selection, Print)
    *  - Supports tree mode (type: tree + tree.parent_field for flat→nested)
    *  - Pagination: initial page + "load more" footer strip (model sources only)
+   *  - $trigger.* substitution in source.where, join where, endpoint params
+   *  - Waits for trigger before loading when source references $trigger.*
    *
    * Props:
-   *   view           ViewDescriptor       resolved view descriptor
-   *   trigger        Record<string,any>   trigger context ($trigger.* substitution — future)
-   *   data           any[]                static data (source: prop)
-   *   onRowClick     (row) => void
-   *   onSelectionChange (rows[]) => void
-   *   onDataLoad     (count) => void
+   *   view     ViewDescriptor            resolved view descriptor
+   *   trigger  Record<string,unknown>    trigger payload from PanelRenderer
+   *   data     any[]                     static data (source: prop)
+   *   onEvent  (name, data) => void      unified event emitter (row_click, data_load, …)
    */
   import DataTable from './DataTable.svelte';
   import type { ColumnDef } from './DataTable.svelte';
@@ -85,22 +85,57 @@
   // Batch sizes offered in the "load more" dropdown
   const LOAD_MORE_OPTIONS = [50, 100, 500];
 
+  // ── Trigger helpers ────────────────────────────────────────────────────────
+
+  // Recursively replace $trigger.field with values from the trigger payload.
+  // When the entire string is a single $trigger.field reference, the raw typed
+  // value is returned (preserving number/boolean types for QB filter comparisons).
+  // When $trigger.* appears as part of a larger string, values are stringified.
+  function applyTriggerVars(value: unknown, trig: Record<string, unknown>): unknown {
+    if (typeof value === 'string') {
+      const exact = value.match(/^\$trigger\.(\w+)$/);
+      if (exact) {
+        const v = trig[exact[1]];
+        return v !== undefined ? v : value;
+      }
+      return value.replace(/\$trigger\.(\w+)/g, (_, key) => {
+        const v = trig[key];
+        return v !== undefined ? String(v) : '';
+      });
+    }
+    if (Array.isArray(value)) return value.map(v => applyTriggerVars(v, trig));
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = applyTriggerVars(v, trig);
+      }
+      return out;
+    }
+    return value;
+  }
+
+  // Returns true if obj (or any nested value) contains a $trigger.* reference.
+  function hasTriggerVars(value: unknown): boolean {
+    if (typeof value === 'string') return /\$trigger\./.test(value);
+    if (Array.isArray(value)) return value.some(hasTriggerVars);
+    if (value && typeof value === 'object') return Object.values(value as object).some(hasTriggerVars);
+    return false;
+  }
+
   // ── Props ──────────────────────────────────────────────────────────────────
 
   let {
     view,
-    trigger = {} as Record<string, unknown>,
+    trigger = undefined as Record<string, unknown> | undefined,
+    collapsed = false,
     data: propData = undefined as unknown[] | undefined,
-    onRowClick = undefined as ((row: unknown) => void) | undefined,
-    onSelectionChange = undefined as ((rows: unknown[]) => void) | undefined,
-    onDataLoad = undefined as ((count: number) => void) | undefined,
+    onEvent = undefined as ((name: string, data: unknown) => void) | undefined,
   }: {
     view: ViewDescriptor;
     trigger?: Record<string, unknown>;
+    collapsed?: boolean;
     data?: unknown[];
-    onRowClick?: (row: unknown) => void;
-    onSelectionChange?: (rows: unknown[]) => void;
-    onDataLoad?: (count: number) => void;
+    onEvent?: (name: string, data: unknown) => void;
   } = $props();
 
   // ── Internal state ─────────────────────────────────────────────────────────
@@ -118,6 +153,8 @@
   // If it initializes with [], virtual-scroll height is 0 and replaceData()
   // later does not properly reconfigure the scroll area.
   let initialized = $state(false);
+  // True when source has $trigger.* vars but no trigger payload has arrived yet.
+  let waitingForTrigger = $state(false);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -172,16 +209,17 @@
 
   // ── Query construction ─────────────────────────────────────────────────────
 
-  // Convert descriptor join item to QB-compatible object.
-  function normalizeJoin(j: string | Record<string, unknown>): Record<string, unknown> {
+  // Convert descriptor join item to QB-compatible object, applying trigger substitution.
+  function normalizeJoin(j: string | Record<string, unknown>, trig: Record<string, unknown>): Record<string, unknown> {
     if (typeof j === 'string') return { table: j };
     if (typeof j.table === 'string' && typeof j.on === 'string') {
       return { [j.table]: j.on };
     }
-    return j;
+    // Pass-through (e.g. {via: ..., where: [...]}) — apply trigger substitution
+    return applyTriggerVars(j, trig) as Record<string, unknown>;
   }
 
-  function buildQuery(src: ViewSource): Record<string, unknown> {
+  function buildQuery(src: ViewSource, trig: Record<string, unknown>): Record<string, unknown> {
     const q: Record<string, unknown> = { table: src.model };
 
     // select: use descriptor column fields (QB select expressions), always include id
@@ -194,7 +232,7 @@
     }
 
     if (src.joins && src.joins.length > 0) {
-      q.joins = src.joins.map(normalizeJoin);
+      q.joins = src.joins.map(j => normalizeJoin(j, trig));
     }
 
     // order_by: "-field" prefix → ["field", "desc"]
@@ -208,9 +246,12 @@
       q.group_by = src.group_by;
     }
 
+    if (src.filters) {
+      q.filters = applyTriggerVars(src.filters, trig);
+    }
+
     // NOTE: limit is NOT forwarded from src.limit here.
     // It is applied in loadData() / loadMore() as the pagination page size.
-    // TODO: where with $trigger.* / $props.* / $ctx.* substitution
     return q;
   }
 
@@ -247,24 +288,45 @@
     const src = view.source;
     void view.columns;              // track columns for $effect reactivity
     const pd = propData;
-    void trigger;                   // track trigger for future where substitution
+    const trig = trigger ?? {};     // track trigger — re-runs when payload changes
+    const isCollapsed = collapsed;  // track collapse — skip load when panel is hidden
     const viewType = view.type;
     const treeCfg = view.tree;
     const _ps = pageSize;           // track: re-runs if source.limit changes
+
 
     // Reset server-side total on every fresh load
     totalCount = null;
 
     // source: prop — use passed data directly (no pagination)
     if (pd !== undefined) {
+      waitingForTrigger = false;
       rows = pd;
       initialized = true;
       return;
     }
 
+    // Don't load while the panel is collapsed — the $effect will re-run on expand.
+    if (isCollapsed) return;
+
+    // If source references $trigger.* but no trigger has arrived yet, show placeholder.
+    // Do NOT set initialized=true here — DataTable must NOT mount with empty data,
+    // otherwise Tabulator initializes with height=0 and virtual scroll breaks.
+    if (hasTriggerVars(src) && Object.keys(trig).length === 0) {
+      waitingForTrigger = true;
+      rows = [];
+      return;
+    }
+
+    // Trigger just arrived (first time): reset initialized so DataTable mounts
+    // fresh with real data instead of via replaceData() on a height=0 instance.
+    if (waitingForTrigger) initialized = false;
+    waitingForTrigger = false;
+
+
     // source: model — query via DynamicQueryBuilder with pagination
     if (src?.model) {
-      const q = buildQuery(src);
+      const q = buildQuery(src, trig);
 
       loading = true;
       error = null;
@@ -311,7 +373,8 @@
       loading = true;
       error = null;
       try {
-        const params = (src.params as Record<string, unknown>) ?? {};
+        const rawParams = (src.params as Record<string, unknown>) ?? {};
+        const params = applyTriggerVars(rawParams, trig) as Record<string, unknown>;
         const res = await api.endpoint(src.endpoint, params);
         if (res.status === 'success') {
           rows = Array.isArray(res.data) ? res.data : [];
@@ -341,7 +404,7 @@
     const src = view.source;
     if (!src?.model) return;
 
-    const q = buildQuery(src);
+    const q = buildQuery(src, trigger ?? {});
     q.offset = rowCount;          // start after rows already in Tabulator
     if (n > 0) q.limit = n;      // omitting limit → QB returns all from offset
 
@@ -384,7 +447,7 @@
 
   function handleDataLoaded(count: number) {
     rowCount = count;
-    onDataLoad?.(count);
+    onEvent?.('data_load', { count });
   }
 </script>
 
@@ -458,7 +521,14 @@
 
   <!-- ── Data body ───────────────────────────────────────────────────────── -->
   <div class="cf-dv-body">
-    {#if error}
+    {#if waitingForTrigger}
+      <div class="cf-dv-placeholder">
+        <svg viewBox="0 0 20 20" fill="currentColor" style="width:1.25rem;height:1.25rem;flex-shrink:0;opacity:0.4" aria-hidden="true">
+          <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd"/>
+        </svg>
+        Seleziona una riga per visualizzare il dettaglio
+      </div>
+    {:else if error}
       <div class="cf-dv-error">
         <svg viewBox="0 0 20 20" fill="currentColor" style="width:1.25rem;height:1.25rem;flex-shrink:0" aria-hidden="true">
           <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd"/>
@@ -474,8 +544,8 @@
         treeMode={isTreeMode}
         treeChildField={treeChildField}
         treeStartExpanded={treeStartExpanded}
-        onRowClick={onRowClick}
-        onSelectionChange={onSelectionChange}
+        onRowClick={(row) => onEvent?.('row_click', row)}
+        onSelectionChange={(rows) => onEvent?.('selection_change', rows)}
         onDataLoaded={handleDataLoaded}
       />
     {/if}
@@ -623,6 +693,18 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .cf-dv-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    height: 100%;
+    color: #9ca3af;
+    font-size: 0.8rem;
+    padding: 1rem;
+    text-align: center;
   }
 
   .cf-dv-error {

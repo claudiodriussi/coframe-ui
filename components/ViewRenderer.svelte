@@ -7,12 +7,11 @@
   interface Props {
     view: Record<string, unknown>;
     trigger?: Record<string, unknown>;
-    onRowClick?: (row: unknown) => void;
-    onSelectionChange?: (rows: unknown[]) => void;
-    onDataLoad?: (count: number) => void;
+    collapsed?: boolean;
+    onEvent?: (name: string, data: unknown) => void;
   }
 
-  let { view, trigger, onRowClick, onSelectionChange, onDataLoad }: Props = $props();
+  let { view, trigger, collapsed, onEvent }: Props = $props();
 </script>
 
 {#if view.type === 'plugin'}
@@ -26,9 +25,8 @@
   <DataView
     view={view as ViewDescriptor}
     trigger={trigger}
-    onRowClick={onRowClick}
-    onSelectionChange={onSelectionChange}
-    onDataLoad={onDataLoad}
+    collapsed={collapsed}
+    onEvent={onEvent}
   />
 
 {:else}

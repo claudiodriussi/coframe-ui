@@ -96,7 +96,55 @@
 
   let container: HTMLDivElement;
   let table: any = null;
+  let tableReady = false;   // true only after Tabulator fires 'tableBuilt'
   let observer: ResizeObserver | null = null;
+
+  // ── Keyboard navigation ────────────────────────────────────────────────────
+  // Plain variables (not reactive) — we manage the DOM class directly.
+  // activeRow:   RowComponent reference for getNextRow/getPrevRow via display order
+  // activeRowId: stable row identity (id field) for re-applying CSS after virtual
+  //              scroll element recycling (renderRow event)
+
+  let activeRow: any = null;
+  let activeRowId: unknown = null;
+
+  function setActiveRow(row: any) {
+    if (activeRow) {
+      try { activeRow.getElement().classList.remove('cf-row-active'); } catch (_) {}
+    }
+    activeRow = row;
+    activeRowId = row.getData()?.id ?? null;
+    try { row.getElement().classList.add('cf-row-active'); } catch (_) {}
+    try { row.scrollTo('nearest', true); } catch (_) {}
+    onRowClick?.(row.getData());
+  }
+
+  function handleKeyNav(e: KeyboardEvent) {
+    if (!table || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    // Prevent browser scroll and Tabulator's own cell-to-cell navigation.
+    // (Cell navigation is intentionally disabled here; editable tables will
+    // need a separate strategy when that feature is implemented.)
+    e.preventDefault();
+
+    // getRows('active') returns all non-filtered rows in current display order
+    // (i.e. respects sort). Essential for correct ↑/↓ traversal after sorting.
+    const displayRows: any[] = table.getRows('active') ?? [];
+    if (displayRows.length === 0) return;
+
+    if (!activeRow) {
+      setActiveRow(displayRows[0]);
+      return;
+    }
+
+    const currentIdx = displayRows.indexOf(activeRow);
+    // currentIdx === -1 if active row was filtered out → jump to first row
+    const fromIdx = currentIdx === -1 ? 0 : currentIdx;
+    const nextIdx = e.key === 'ArrowDown' ? fromIdx + 1 : fromIdx - 1;
+    if (nextIdx >= 0 && nextIdx < displayRows.length) {
+      setActiveRow(displayRows[nextIdx]);
+    }
+    // at border: stay on current row (no wrap-around)
+  }
 
   // ── Tabulator config builder ───────────────────────────────────────────────
 
@@ -202,10 +250,9 @@
     table.on('cellClick', (_e: MouseEvent, cell: any) => {
       const field: string = cell.getField();
       if (!field) return; // rowSelection column has no field
-      const row = cell.getRow().getData();
-      const value: unknown = cell.getValue();
-      onCellClick?.({ field, value, row });
-      onRowClick?.(row);
+      const rowComp = cell.getRow();
+      onCellClick?.({ field, value: cell.getValue(), row: rowComp.getData() });
+      setActiveRow(rowComp); // updates activeRow + fires onRowClick
     });
 
     if (selectable) {
@@ -216,20 +263,46 @@
     }
 
     table.on('dataLoaded', (loadedData: any[]) => {
+      // Reset active row when data is fully replaced (replaceData / initial load).
+      // addData (load-more) does not fire dataLoaded, so activeRow is preserved.
+      activeRow = null;
+      activeRowId = null;
       onDataLoaded?.(loadedData.length);
     });
 
+    // Re-apply active row CSS class when virtual scroll recycles row elements.
+    // Without this, scrolling away and back would lose the visual highlight.
+    table.on('renderRow', (row: any) => {
+      if (activeRowId === null) return;
+      const el = row.getElement();
+      if (row.getData()?.id === activeRowId) {
+        el.classList.add('cf-row-active');
+      } else {
+        el.classList.remove('cf-row-active');
+      }
+    });
+
+    // tableBuilt fires when Tabulator has finished initializing all its modules.
+    // Only after this event is it safe to call redraw() or other layout methods.
+    table.on('tableBuilt', () => {
+      tableReady = true;
+    });
+
+    // Keyboard ↑/↓ navigation — fires same onRowClick as mouse click
+    container.addEventListener('keydown', handleKeyNav);
+
     // ResizeObserver: notifies Tabulator of container resizes (e.g. SplitPane).
-    // With height:"100%" CSS already controls the height; redraw(true) updates
-    // visible rows in the virtual scroll after the container changes size.
+    // Guard with tableReady: observe() can fire synchronously on some browsers
+    // before tableBuilt, when table is assigned but internal DOM is not ready.
     observer = new ResizeObserver(() => {
-      if (table) table.redraw(true);
+      if (tableReady) table.redraw(true);
     });
     observer.observe(container);
   });
 
   onDestroy(() => {
     observer?.disconnect();
+    container.removeEventListener('keydown', handleKeyNav);
     table?.destroy();
     table = null;
   });
@@ -362,6 +435,17 @@
 
   :global(.tabulator-row.tabulator-selected:hover),
   :global(.tabulator-row.tabulator-row-even.tabulator-selected:hover) {
+    background: #bfdbfe !important;
+  }
+
+  /* Active row — keyboard navigation highlight (same palette as selected) */
+  :global(.tabulator-row.cf-row-active),
+  :global(.tabulator-row.tabulator-row-even.cf-row-active) {
+    background: #dbeafe !important;
+  }
+
+  :global(.tabulator-row.cf-row-active:hover),
+  :global(.tabulator-row.tabulator-row-even.cf-row-active:hover) {
     background: #bfdbfe !important;
   }
 

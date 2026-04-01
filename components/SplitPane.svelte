@@ -37,6 +37,7 @@
     gutterSize     = 6,
     collapseTarget = 'b',
     storageKey     = undefined as string | undefined,
+    onCollapse     = undefined as ((isCollapsed: boolean) => void) | undefined,
     a,
     b,
   }: {
@@ -47,6 +48,7 @@
     gutterSize?:     number;
     collapseTarget?: CollapseTarget;
     storageKey?:     string;
+    onCollapse?:     (isCollapsed: boolean) => void;
     a: Snippet;
     b: Snippet;
   } = $props();
@@ -111,15 +113,12 @@
   // — Toggle collapse ————————————————————————————————————————
   function toggleCollapse() {
     if (collapsed) {
-      // Restore
       collapsed = false;
       instance?.setSizes(savedSizes);
     } else {
-      // Collapse: save current position then bring the panel to 0
       savedSizes = (instance?.getSizes() ?? [...defaultSizes]) as [number, number];
       storeSet(savedSizes);
       collapsed = true;
-      // setSizes bypasses minSize → always goes to 0 regardless of the prop
       if (collapseTarget === 'a') {
         instance?.setSizes([0, 100]);
       } else {
@@ -127,6 +126,7 @@
       }
     }
     syncArrow();
+    onCollapse?.(collapsed);
   }
 
   // — Reset (gutter double-click) ————————————————————————————
@@ -136,6 +136,7 @@
     storeClear();
     instance?.setSizes([...defaultSizes]);
     syncArrow();
+    onCollapse?.(false);
   }
 
   // — Lifecycle ——————————————————————————————————————————
