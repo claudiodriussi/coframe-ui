@@ -219,7 +219,7 @@
       headerSort: true,
       movableColumns: true,
       resizableColumnFit: false,
-      selectableRows: selectable ? true : false,
+      selectableRows: true,
       placeholder: 'No data to display',
       scrollToRowPosition: 'nearest',
       scrollToRowIfVisible: false,  // false = skip scroll when row is already visible
@@ -271,32 +271,32 @@
       setActiveRow(rowComp);
     });
 
-    if (selectable) {
-      // rowMouseDown fires before Tabulator processes the click, so we can
-      // snapshot the current selection before a data-cell click clears it.
-      let _savedSel: any[] = [];
-      let _restoringsel = false;
+    // Selection listeners are always registered so they work when selectable
+    // is toggled on after mount. Guards inside each handler check current value.
+    let _savedSel: any[] = [];
+    let _restoringsel = false;
 
-      table.on('rowMouseDown', (_e: MouseEvent, _row: any) => {
-        _savedSel = table.getSelectedData();
-      });
+    table.on('rowMouseDown', (_e: MouseEvent, _row: any) => {
+      if (selectable) _savedSel = table.getSelectedData();
+    });
 
-      // rowClick fires after Tabulator has already single-selected the clicked row.
-      // Skip if the click came from the checkbox column; otherwise restore the
-      // pre-click selection so that data-cell clicks don't affect checkboxes.
-      table.on('rowClick', (e: MouseEvent, _row: any) => {
-        if ((e.target as HTMLElement)?.closest('.cf-col-select')) return;
-        _restoringsel = true;
-        table.deselectRow();
-        _savedSel.forEach((d: any) => table.selectRow(d.id));
-        _restoringsel = false;
-      });
+    // rowClick fires after Tabulator has already single-selected the clicked row.
+    // When selectable is off: deselect immediately (no visible selection UI).
+    // When selectable is on: skip checkbox column clicks; restore pre-click
+    // selection for data-cell clicks so only checkboxes affect selection.
+    table.on('rowClick', (e: MouseEvent, _row: any) => {
+      if (!selectable) { table.deselectRow(); return; }
+      if ((e.target as HTMLElement)?.closest('.cf-col-select')) return;
+      _restoringsel = true;
+      table.deselectRow();
+      _savedSel.forEach((d: any) => table.selectRow(d.id));
+      _restoringsel = false;
+    });
 
-      table.on('rowSelectionChanged', (selectedData: any[]) => {
-        if (_restoringsel) return;
-        onSelectionChange?.(selectedData);
-      });
-    }
+    table.on('rowSelectionChanged', (selectedData: any[]) => {
+      if (_restoringsel) return;
+      onSelectionChange?.(selectedData);
+    });
 
     table.on('dataLoaded', (loadedData: any[]) => {
       activeRow = null;
@@ -410,24 +410,24 @@
   /* ── Tabulator reset → Coframe design system ───────────────────────────── */
 
   :global(.tabulator) {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--cf-border);
     border-radius: 0.5rem;
     font-size: 0.875rem;
     font-family: inherit;
-    background: #ffffff;
+    background: var(--cf-bg);
     overflow: hidden;
   }
 
   /* Header */
 
   :global(.tabulator-header) {
-    background: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
+    background: var(--cf-surface);
+    border-bottom: 1px solid var(--cf-border);
   }
 
   :global(.tabulator-col) {
-    background: #f9fafb;
-    border-right: 1px solid #e5e7eb;
+    background: var(--cf-surface);
+    border-right: 1px solid var(--cf-border);
   }
 
   :global(.tabulator-col:last-child) {
@@ -439,35 +439,35 @@
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: #6b7280;
+    color: var(--cf-text-muted);
     padding: 0.5rem 0.75rem;
   }
 
   :global(.tabulator-col.tabulator-sortable .tabulator-col-title:hover) {
-    color: #374151;
+    color: var(--cf-text);
   }
 
   :global(.tabulator-col-sorter) {
-    color: #9ca3af;
+    color: var(--cf-text-subtle);
   }
 
   /* Rows */
 
   :global(.tabulator-row) {
-    border-bottom: 1px solid #f3f4f6;
-    color: #374151;
-    background: #ffffff;
+    border-bottom: 1px solid var(--cf-surface-hover);
+    color: var(--cf-text);
+    background: var(--cf-bg);
     cursor: pointer;
     transition: background 0.1s;
   }
 
   :global(.tabulator-row.tabulator-row-even) {
-    background: #fafafa;
+    background: var(--cf-surface);
   }
 
   :global(.tabulator-row:hover),
   :global(.tabulator-row.tabulator-row-even:hover) {
-    background: #eff6ff !important;
+    background: var(--cf-accent-subtle) !important;
   }
 
   /* Selected rows — no background change, checkbox is the only indicator */
@@ -481,12 +481,12 @@
   /* Active row — keyboard navigation highlight */
   :global(.tabulator-row.cf-row-active),
   :global(.tabulator-row.tabulator-row-even.cf-row-active) {
-    background: #dbeafe !important;
+    background: var(--cf-accent-light) !important;
   }
 
   :global(.tabulator-row.cf-row-active:hover),
   :global(.tabulator-row.tabulator-row-even.cf-row-active:hover) {
-    background: #bfdbfe !important;
+    background: var(--cf-accent-muted) !important;
   }
 
   /* Cells */
@@ -502,15 +502,15 @@
     width: 100%;
     padding: 0.15rem 0.35rem;
     font-size: 0.72rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--cf-border-input);
     border-radius: 0.25rem;
-    background: #ffffff;
-    color: #374151;
+    background: var(--cf-bg);
+    color: var(--cf-text);
     outline: none;
   }
   :global(.tabulator-header-filter input:focus) {
-    border-color: #93c5fd;
-    box-shadow: 0 0 0 2px #dbeafe;
+    border-color: var(--cf-accent-border);
+    box-shadow: 0 0 0 2px var(--cf-accent-light);
   }
 
   /* Internal scrollbar */
@@ -523,8 +523,8 @@
   /* Footer / Pagination */
 
   :global(.tabulator-footer) {
-    background: #f9fafb;
-    border-top: 1px solid #e5e7eb;
+    background: var(--cf-surface);
+    border-top: 1px solid var(--cf-border);
     padding: 0.375rem 0.75rem;
     display: flex;
     align-items: center;
@@ -532,26 +532,26 @@
   }
 
   :global(.tabulator-page) {
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--cf-border-input);
     border-radius: 0.25rem;
     padding: 0.2rem 0.5rem;
-    background: #ffffff;
-    color: #374151;
+    background: var(--cf-bg);
+    color: var(--cf-text);
     font-size: 0.75rem;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
   }
 
   :global(.tabulator-page:not([disabled]):hover) {
-    background: #eff6ff;
-    border-color: #93c5fd;
-    color: #1d4ed8;
+    background: var(--cf-accent-subtle);
+    border-color: var(--cf-accent-border);
+    color: var(--cf-accent-hover);
   }
 
   :global(.tabulator-page.active) {
-    background: #2563eb;
-    border-color: #2563eb;
-    color: #ffffff;
+    background: var(--cf-accent);
+    border-color: var(--cf-accent);
+    color: var(--cf-bg);
   }
 
   :global(.tabulator-page[disabled]) {

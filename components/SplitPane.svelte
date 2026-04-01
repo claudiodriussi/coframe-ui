@@ -238,7 +238,7 @@
   /* ---- Gutter (elementi creati da split.js, fuori scope Svelte) ---- */
 
   :global(.cf-gutter) {
-    background: #e5e7eb;
+    background: var(--cf-border);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -249,7 +249,7 @@
   }
 
   :global(.cf-gutter:hover) {
-    background: #d1d5db;
+    background: var(--cf-border-input);
   }
 
   :global(.cf-gutter-horizontal) { cursor: col-resize; }
@@ -269,12 +269,12 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #ffffff;
-    border: 1px solid #d1d5db;
+    background: var(--cf-bg);
+    border: 1px solid var(--cf-border-input);
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
     cursor: pointer;
     font-size: 9px;
-    color: #6b7280;
+    color: var(--cf-text-muted);
     z-index: 1;
     padding: 0;
     line-height: 1;
@@ -284,13 +284,13 @@
   }
 
   :global(.cf-gutter-btn:hover) {
-    background: #eff6ff;
-    border-color: #93c5fd;
-    color: #1d4ed8;
+    background: var(--cf-accent-subtle);
+    border-color: var(--cf-accent-border);
+    color: var(--cf-accent-hover);
   }
 
   :global(.cf-gutter-btn:focus-visible) {
-    outline: 2px solid #2563eb;
+    outline: 2px solid var(--cf-accent);
     outline-offset: 2px;
   }
 </style>
