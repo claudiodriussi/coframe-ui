@@ -148,13 +148,13 @@
   let loadingMore = $state(false);
   let loadMoreOpen = $state(false);
   let error = $state<string | null>(null);
-  // Deferred mount: DataTable mounts only after the first data load so that
-  // Tabulator's virtual scroll is initialized with actual data (not empty []).
-  // If it initializes with [], virtual-scroll height is 0 and replaceData()
-  // later does not properly reconfigure the scroll area.
   let initialized = $state(false);
-  // True when source has $trigger.* vars but no trigger payload has arrived yet.
   let waitingForTrigger = $state(false);
+  // Filter + selection modes
+  let filterMode = $state(false);
+  let selectMode = $state(false);
+  let filteredCount = $state<number | null>(null);  // null = no active filter
+  let selectedCount = $state(0);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -431,7 +431,7 @@
   // ── Derived UI state ───────────────────────────────────────────────────────
 
   const toolbarItems = $derived(view.actions?.toolbar ?? []);
-  const selectable = $derived(view.policy?.selection === true);
+  const selectable = $derived(selectMode || view.policy?.selection === true);
   const isTreeMode = $derived(view.type === 'tree');
   const treeChildField = $derived(view.tree?.child_field ?? 'children');
   const treeStartExpanded = $derived(view.tree?.start_expanded ?? false);
@@ -443,11 +443,37 @@
     tableRef?.download('csv', `${name}.csv`);
   }
 
+  function toggleFilter() {
+    if (filterMode) {
+      tableRef?.clearHeaderFilter();
+      // filteredCount resets automatically via onFiltered when clearHeaderFilter fires dataFiltered
+    }
+    filterMode = !filterMode;
+  }
+
+  function toggleSelect() {
+    if (selectMode) {
+      tableRef?.clearSelection();
+      selectedCount = 0;
+    }
+    selectMode = !selectMode;
+  }
+
   // ── Internal callbacks ─────────────────────────────────────────────────────
 
   function handleDataLoaded(count: number) {
     rowCount = count;
+    filteredCount = null; // new data load resets any filter count
     onEvent?.('data_load', { count });
+  }
+
+  function handleFiltered(count: number) {
+    filteredCount = count < rowCount ? count : null;
+  }
+
+  function handleSelectionChange(rows: unknown[]) {
+    selectedCount = rows.length;
+    onEvent?.('selection_change', rows);
   }
 </script>
 
@@ -475,12 +501,21 @@
         </button>
       {/if}
 
-      {#if toolbarItems.includes('selection')}
-        <button class="cf-dv-btn" title="Selection / Filters" disabled>
+      {#if toolbarItems.includes('filter')}
+        <button class="cf-dv-btn" title="Toggle column filters" onclick={toggleFilter}>
           <svg viewBox="0 0 20 20" fill="currentColor" class="cf-dv-icon" aria-hidden="true">
             <path fill-rule="evenodd" d="M2.628 1.601C5.028 1.206 7.49 1 10 1s4.973.206 7.372.601a.75.75 0 0 1 .628.74v2.288a2.25 2.25 0 0 1-.659 1.59l-4.682 4.683a2.25 2.25 0 0 0-.659 1.59v3.037c0 .684-.31 1.33-.844 1.757l-1.937 1.55A.75.75 0 0 1 9 18.25v-5.757a2.25 2.25 0 0 0-.659-1.591L3.659 6.22A2.25 2.25 0 0 1 3 4.629V2.34a.75.75 0 0 1 .628-.74Z" clip-rule="evenodd"/>
           </svg>
-          Selection
+          Filter
+        </button>
+      {/if}
+
+      {#if toolbarItems.includes('select')}
+        <button class="cf-dv-btn" title="Toggle row selection" onclick={toggleSelect}>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="cf-dv-icon" aria-hidden="true">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd"/>
+          </svg>
+          Select
         </button>
       {/if}
 
@@ -510,11 +545,7 @@
         <div class="cf-dv-spinner" aria-label="Loading"></div>
       {/if}
       <span class="cf-dv-count">
-        {#if totalCount !== null}
-          {rowCount} / {totalCount} righe
-        {:else}
-          {rowCount} righe
-        {/if}
+        {#if filteredCount !== null}{filteredCount} / {/if}{rowCount}{#if totalCount !== null} / {totalCount}{/if} righe{#if selectedCount > 0} · {selectedCount} sel.{/if}
       </span>
     </div>
   </div>
@@ -541,12 +572,14 @@
         data={rows}
         columns={columnDefs}
         selectable={selectable}
+        filterMode={filterMode}
         treeMode={isTreeMode}
         treeChildField={treeChildField}
         treeStartExpanded={treeStartExpanded}
         onRowClick={(row) => onEvent?.('row_click', row)}
-        onSelectionChange={(rows) => onEvent?.('selection_change', rows)}
+        onSelectionChange={handleSelectionChange}
         onDataLoaded={handleDataLoaded}
+        onFiltered={handleFiltered}
       />
     {/if}
   </div>
@@ -662,6 +695,7 @@
     opacity: 0.45;
     cursor: not-allowed;
   }
+
 
   .cf-dv-icon {
     width: 0.8rem;

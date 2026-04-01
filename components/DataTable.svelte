@@ -71,14 +71,17 @@
     treeMode = false,
     treeChildField = 'children',
     treeStartExpanded = false,
+    filterMode = false,
     onRowClick = undefined as ((row: any) => void) | undefined,
     onCellClick = undefined as ((cell: CellInfo) => void) | undefined,
     onSelectionChange = undefined as ((rows: any[]) => void) | undefined,
     onDataLoaded = undefined as ((count: number) => void) | undefined,
+    onFiltered = undefined as ((count: number) => void) | undefined,
   }: {
     data?: any[];
     columns?: ColumnDef[];
     selectable?: boolean;
+    filterMode?: boolean;
     mode?: 'virtual' | 'page';
     pageSize?: number;
     rowHeight?: number;
@@ -90,6 +93,7 @@
     onCellClick?: (cell: CellInfo) => void;
     onSelectionChange?: (rows: any[]) => void;
     onDataLoaded?: (count: number) => void;
+    onFiltered?: (count: number) => void;
   } = $props();
 
   // ── Internal state ─────────────────────────────────────────────────────────
@@ -98,6 +102,33 @@
   let table: any = null;
   let tableReady = false;   // true only after Tabulator fires 'tableBuilt'
   let observer: ResizeObserver | null = null;
+
+  // Manual selection — plain JS Set (not reactive), updated via row reformat.
+  // We bypass Tabulator's selectableRows API entirely to avoid its row-click
+  // single-select behavior. The checkbox formatter reads this Set each time
+  // a row is rendered; cellClick toggles the id and calls row.reformat().
+  const _sel = new Set<unknown>();
+
+  function _selToggle(id: unknown, t: any) {
+    if (_sel.has(id)) _sel.delete(id); else _sel.add(id);
+    _updateHeaderCb();
+    onSelectionChange?.(t.getData().filter((d: any) => _sel.has(d.id)));
+  }
+
+  function _selClear() {
+    _sel.clear();
+    _updateHeaderCb();
+  }
+
+  function _updateHeaderCb() {
+    if (!container) return;
+    const cb = container.querySelector<HTMLInputElement>('.cf-col-select .tabulator-col-title input');
+    if (!cb) return;
+    const rows = table?.getRows('active') ?? [];
+    const n = rows.filter((r: any) => _sel.has(r.getData().id)).length;
+    cb.checked = rows.length > 0 && n === rows.length;
+    cb.indeterminate = n > 0 && n < rows.length;
+  }
 
   // ── Keyboard navigation ────────────────────────────────────────────────────
   // Plain variables (not reactive) — we manage the DOM class directly.
@@ -151,18 +182,43 @@
 
     if (selectable) {
       cols.push({
-        formatter: 'rowSelection',
-        titleFormatter: 'rowSelection',
+        // Custom formatter: renders a checkbox whose state mirrors _sel.
+        // pointer-events:none lets clicks fall through to the cell, so
+        // cellClick is the single handler (no double-fire with checkbox).
+        formatter: (cell: any) => {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = _sel.has(cell.getRow().getData().id);
+          cb.style.cssText = 'cursor:pointer;margin:0;pointer-events:none';
+          return cb;
+        },
+        // Header: "select all visible rows" checkbox with indeterminate state.
+        titleFormatter: (cell: any) => {
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.style.cssText = 'cursor:pointer;margin:0';
+          cb.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const t = cell.getTable();
+            const rows = t.getRows('active');
+            const allOn = rows.length > 0 && rows.every((r: any) => _sel.has(r.getData().id));
+            rows.forEach((r: any) => allOn ? _sel.delete(r.getData().id) : _sel.add(r.getData().id));
+            t.redraw();
+            _updateHeaderCb();
+            onSelectionChange?.(t.getData().filter((d: any) => _sel.has(d.id)));
+          });
+          return cb;
+        },
         hozAlign: 'center',
+        headerHozAlign: 'center',
         headerSort: false,
         width: 44,
         minWidth: 44,
         maxWidth: 44,
         frozen: true,
-        // cellClick prevents double-firing: clicks on the checkbox cell
-        // handle selection only; the row does not trigger onRowClick
         cellClick: (_e: Event, cell: any) => {
-          cell.getRow().toggleSelect();
+          _selToggle(cell.getRow().getData().id, cell.getTable());
+          cell.getRow().reformat();
         },
         cssClass: 'cf-col-select',
       });
@@ -176,6 +232,10 @@
         headerSort: c.headerSort !== false,
         visible: c.visible !== false,
       };
+      if (filterMode) {
+        col.headerFilter = 'input';
+        col.headerFilterPlaceholder = ' ';
+      }
       if (c.width !== undefined)         col.width = c.width;
       if (c.minWidth !== undefined)      col.minWidth = c.minWidth;
       if (c.maxWidth !== undefined)      col.maxWidth = c.maxWidth;
@@ -203,7 +263,6 @@
       headerSort: true,
       movableColumns: true,
       resizableColumnFit: false,
-      selectableRows: selectable ? true : false,
       placeholder: 'No data to display',
       scrollToRowPosition: 'nearest',
       scrollToRowIfVisible: false,  // false = skip scroll when row is already visible
@@ -255,19 +314,15 @@
       setActiveRow(rowComp); // updates activeRow + fires onRowClick
     });
 
-    if (selectable) {
-      // rowSelectionChanged: data = data array, rows = RowComponent array
-      table.on('rowSelectionChanged', (selectedData: any[]) => {
-        onSelectionChange?.(selectedData);
-      });
-    }
-
     table.on('dataLoaded', (loadedData: any[]) => {
-      // Reset active row when data is fully replaced (replaceData / initial load).
-      // addData (load-more) does not fire dataLoaded, so activeRow is preserved.
       activeRow = null;
       activeRowId = null;
+      _selClear();
       onDataLoaded?.(loadedData.length);
+    });
+
+    table.on('dataFiltered', (_filters: any[], rows: any[]) => {
+      onFiltered?.(rows.length);
     });
 
     // Re-apply active row CSS class when virtual scroll recycles row elements.
@@ -320,8 +375,8 @@
   });
 
   $effect(() => {
-    // buildColumns() reads `columns` internally — calling it here ensures
-    // the effect is subscribed to `columns` changes regardless of `table`.
+    void selectable;   // re-run when checkbox column toggled on/off
+    void filterMode;   // re-run when filter inputs added/removed (Tabulator recalcs header height)
     const cols = buildColumns();
     if (table) table.setColumns(cols);
   });
@@ -337,11 +392,17 @@
   }
 
   export function clearSelection() {
-    table?.deselectRow();
+    _selClear();
+    table?.redraw();
+    onSelectionChange?.([]);
+  }
+
+  export function clearHeaderFilter() {
+    table?.clearHeaderFilter();
   }
 
   export function getSelectedData(): any[] {
-    return table?.getSelectedData() ?? [];
+    return (table?.getData() ?? []).filter((d: any) => _sel.has(d.id));
   }
 
   // Append rows to the existing dataset, respecting the current sort order.
@@ -428,14 +489,12 @@
     background: #eff6ff !important;
   }
 
+  /* Selected rows — no background change, checkbox is the only indicator */
   :global(.tabulator-row.tabulator-selected),
-  :global(.tabulator-row.tabulator-row-even.tabulator-selected) {
-    background: #dbeafe !important;
-  }
-
+  :global(.tabulator-row.tabulator-row-even.tabulator-selected),
   :global(.tabulator-row.tabulator-selected:hover),
   :global(.tabulator-row.tabulator-row-even.tabulator-selected:hover) {
-    background: #bfdbfe !important;
+    background: inherit !important;
   }
 
   /* Active row — keyboard navigation highlight (same palette as selected) */
@@ -460,6 +519,22 @@
   /* Checkbox column — reduce lateral padding */
   :global(.cf-col-select) {
     padding: 0 0.25rem !important;
+  }
+
+  /* Header filter inputs — style when visible (rendered only when filterMode=true) */
+  :global(.tabulator-header-filter input) {
+    width: 100%;
+    padding: 0.15rem 0.35rem;
+    font-size: 0.72rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.25rem;
+    background: #ffffff;
+    color: #374151;
+    outline: none;
+  }
+  :global(.tabulator-header-filter input:focus) {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 2px #dbeafe;
   }
 
   /* Internal scrollbar */
