@@ -63,6 +63,36 @@
   }
 }
 
+/* ── Component tokens (--cf-*) ──────────────────────────────── */
+/* Used by component <style> blocks. Tailwind template classes
+   are left untouched until the full chrome/theme work. */
+:root {
+  /* Surfaces */
+  --cf-bg:             #ffffff;
+  --cf-surface:        #f9fafb;   /* gray-50  — toolbar, footer, header */
+  --cf-surface-hover:  #f3f4f6;   /* gray-100 — hover states */
+
+  /* Borders */
+  --cf-border:         #e5e7eb;   /* gray-200 — default borders */
+  --cf-border-input:   #d1d5db;   /* gray-300 — inputs, buttons */
+
+  /* Text */
+  --cf-text:           #374151;   /* gray-700 — main text */
+  --cf-text-muted:     #6b7280;   /* gray-500 — secondary text */
+  --cf-text-subtle:    #9ca3af;   /* gray-400 — placeholder, icons */
+
+  /* Accent (blue) */
+  --cf-accent:         #2563eb;   /* blue-600 — primary */
+  --cf-accent-hover:   #1d4ed8;   /* blue-700 — hover */
+  --cf-accent-subtle:  #eff6ff;   /* blue-50  — row hover */
+  --cf-accent-light:   #dbeafe;   /* blue-200 — active row */
+  --cf-accent-muted:   #bfdbfe;   /* blue-300 — active row hover */
+  --cf-accent-border:  #93c5fd;   /* blue-300 — focus rings */
+
+  /* Semantic */
+  --cf-danger:         #dc2626;   /* red-600  — errors */
+}
+
 @layer utilities {
   .scrollbar-hide {
     scrollbar-width: none;
