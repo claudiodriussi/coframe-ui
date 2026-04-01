@@ -115,35 +115,33 @@
     activeRow = row;
     activeRowId = row.getData()?.id ?? null;
     try { row.getElement().classList.add('cf-row-active'); } catch (_) {}
-    try { row.scrollTo('nearest', true); } catch (_) {}
     onRowClick?.(row.getData());
   }
 
   function handleKeyNav(e: KeyboardEvent) {
     if (!table || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
-    // Prevent browser scroll and Tabulator's own cell-to-cell navigation.
-    // (Cell navigation is intentionally disabled here; editable tables will
-    // need a separate strategy when that feature is implemented.)
     e.preventDefault();
 
-    // getRows('active') returns all non-filtered rows in current display order
-    // (i.e. respects sort). Essential for correct ↑/↓ traversal after sorting.
     const displayRows: any[] = table.getRows('active') ?? [];
     if (displayRows.length === 0) return;
 
     if (!activeRow) {
       setActiveRow(displayRows[0]);
+      try { displayRows[0].scrollTo('top', false); } catch (_) {}
       return;
     }
 
     const currentIdx = displayRows.indexOf(activeRow);
-    // currentIdx === -1 if active row was filtered out → jump to first row
     const fromIdx = currentIdx === -1 ? 0 : currentIdx;
     const nextIdx = e.key === 'ArrowDown' ? fromIdx + 1 : fromIdx - 1;
     if (nextIdx >= 0 && nextIdx < displayRows.length) {
       setActiveRow(displayRows[nextIdx]);
+      // 'bottom' when going down: new row appears at bottom of viewport (not top)
+      // 'top'    when going up:   new row appears at top of viewport
+      // ifVisible=false: skip scroll if row is already in view
+      const pos = e.key === 'ArrowDown' ? 'bottom' : 'top';
+      try { displayRows[nextIdx].scrollTo(pos, false); } catch (_) {}
     }
-    // at border: stay on current row (no wrap-around)
   }
 
   // ── Tabulator config builder ───────────────────────────────────────────────
@@ -207,6 +205,8 @@
       resizableColumnFit: false,
       selectableRows: selectable ? true : false,
       placeholder: 'No data to display',
+      scrollToRowPosition: 'nearest',
+      scrollToRowIfVisible: false,  // false = skip scroll when row is already visible
     };
 
     if (mode === 'page') {
