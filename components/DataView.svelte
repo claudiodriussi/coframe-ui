@@ -24,6 +24,7 @@
   import type { ColumnDef } from '$coframe/tabulator/CoframeTable';
   import { api } from '$coframe/api/client';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
+  import { formatterRegistry } from '$coframe/formatters/registry';
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@
     hozAlign?: 'left' | 'center' | 'right';  // Tabulator native
     align?: 'left' | 'center' | 'right';      // user-friendly alias for hozAlign
     formatter?: 'date' | 'datetime' | 'time' | string;
+    formatterParams?: Record<string, unknown>;
     visible?: boolean;
     frozen?: boolean;
     [key: string]: unknown;
@@ -101,6 +103,25 @@
     datetime: (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleString()      : String(cell.getValue() ?? ''); },
     time:     (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleTimeString()  : String(cell.getValue() ?? ''); },
   };
+
+  // Shorthand param schemas for Tabulator built-in formatters (third-party, can't self-declare).
+  // Custom formatters declare their own via formatterRegistry.register(..., { shorthand }).
+  // `formatter: star,5` → name='star', formatterParams={ stars: 5 }
+  const TABULATOR_SHORTHAND: Record<string, (args: string[]) => Record<string, unknown>> = {
+    star:     ([n])    => ({ stars: Number(n) }),
+    progress: ([a, b]) => ({ min: Number(a ?? 0), max: Number(b ?? 100) }),
+  };
+
+  // Parse "name,arg1,arg2" shorthand → [resolvedName, params|undefined].
+  // Lookup order: registry shorthand → Tabulator built-in schema → generic {args}.
+  function _parseFmtShorthand(raw: string): [string, Record<string, unknown> | undefined] {
+    const idx = raw.indexOf(',');
+    if (idx === -1) return [raw, undefined];
+    const name = raw.slice(0, idx).trim();
+    const args = raw.slice(idx + 1).split(',').map(s => s.trim());
+    const parser = formatterRegistry.getShorthand(name) ?? TABULATOR_SHORTHAND[name];
+    return [name, parser ? parser(args) : { args }];
+  }
 
   // ── View state persistence ─────────────────────────────────────────────────
 
@@ -343,10 +364,18 @@
         ?? c.hozAlign
         ?? inferredAligns[fieldKey];
       if (align) def.hozAlign = align;
-      // formatter: YAML name resolved to function via DATE_FORMATTERS (else raw string for
-      // Tabulator built-ins), else inferred format name resolved to function. YAML wins.
-      const fmtName = c.formatter ?? inferredFormatters[fieldKey];
-      if (fmtName) def.formatter = DATE_FORMATTERS[fmtName] ?? fmtName;
+      // formatter resolution: parse optional shorthand "name,arg1,arg2", then
+      // DATE_FORMATTERS → plugin registry → Tabulator built-in string.
+      // YAML formatter wins over inferred; explicit formatterParams wins over shorthand.
+      const rawFmt = c.formatter ?? inferredFormatters[fieldKey];
+      if (rawFmt) {
+        const [fmtName, shorthandParams] = _parseFmtShorthand(rawFmt);
+        def.formatter = DATE_FORMATTERS[fmtName] ?? formatterRegistry.get(fmtName) ?? fmtName;
+        const resolvedParams = c.formatterParams ?? shorthandParams;
+        if (resolvedParams) def.formatterParams = resolvedParams;
+      } else if (c.formatterParams) {
+        def.formatterParams = c.formatterParams;
+      }
       if (c.visible === false)      def.visible = false;
       if (c.frozen)                 def.frozen = true;
       return def;

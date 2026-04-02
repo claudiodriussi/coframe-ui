@@ -224,6 +224,13 @@
     color: inherit;
   }
 
+  /* Tailwind preflight sets svg { display: block } which stacks star-formatter SVGs
+     vertically. Override so Tabulator's built-in formatters render correctly. */
+  :global(.tabulator-cell svg) {
+    display: inline;
+    vertical-align: middle;
+  }
+
   /* Header filter inputs — style when visible (rendered only when filterMode=true) */
   :global(.tabulator-header-filter input) {
     width: 100%;
