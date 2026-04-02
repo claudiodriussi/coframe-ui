@@ -20,7 +20,7 @@
    *   onEvent  (name, data) => void      unified event emitter (row_click, data_load, …)
    */
   import DataTable from './DataTable.svelte';
-  import type { ColumnDef } from './DataTable.svelte';
+  import type { ColumnDef } from '$coframe/tabulator/CoframeTable';
   import { api } from '$coframe/api/client';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
 
@@ -85,6 +85,15 @@
   // Batch sizes offered in the "load more" dropdown
   const LOAD_MORE_OPTIONS = [50, 100, 500];
 
+  // ── View state persistence ─────────────────────────────────────────────────
+
+  interface SavedViewState {
+    filterMode: boolean;
+    filters: Array<{ field: string; type: string; value: unknown }>;
+    sorters: Array<{ field: string; dir: string }>;
+    rowCount: number;
+  }
+
   // ── Trigger helpers ────────────────────────────────────────────────────────
 
   // Recursively replace $trigger.field with values from the trigger payload.
@@ -138,6 +147,18 @@
     onEvent?: (name: string, data: unknown) => void;
   } = $props();
 
+  // ── View state persistence (key + initial load) ────────────────────────────
+  // Computed before internal state so filterMode can be initialized from savedState.
+
+  function getStateKey(): string {
+    return `dataview.${view.source?.model ?? (view.source as any)?.endpoint ?? 'custom'}`;
+  }
+
+  const savedState: SavedViewState | null = (() => {
+    try { return JSON.parse(localStorage.getItem(getStateKey()) ?? 'null') as SavedViewState; }
+    catch { return null; }
+  })();
+
   // ── Internal state ─────────────────────────────────────────────────────────
 
   let tableRef: DataTable | null = $state(null);
@@ -150,11 +171,16 @@
   let error = $state<string | null>(null);
   let initialized = $state(false);
   let waitingForTrigger = $state(false);
-  // Filter + selection modes
-  let filterMode = $state(false);
+  // Filter + selection modes — filterMode initialized from savedState so Tabulator
+  // builds columns with headerFilter inputs already present on first render.
+  let filterMode = $state(savedState?.filterMode ?? false);
   let selectMode = $state(false);
   let filteredCount = $state<number | null>(null);  // null = no active filter
   let selectedCount = $state(0);
+  // State persistence
+  let tabulatorReady = $state(false);   // true after Tabulator fires tableBuilt
+  let restoreComplete = $state(false);
+  let bannerRowCount = $state<number | null>(null);  // non-null → show restore banner
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -173,6 +199,48 @@
   const hasMore = $derived(
     view.type !== 'tree' && totalCount !== null && rowCount < totalCount
   );
+
+  function saveViewState() {
+    if (!restoreComplete || !tableRef) return;
+    const state: SavedViewState = {
+      filterMode,
+      filters: (tableRef as any).getHeaderFilters(),
+      sorters: (tableRef as any).getSorters(),
+      rowCount,
+    };
+    try { localStorage.setItem(getStateKey(), JSON.stringify(state)); } catch (_) {}
+  }
+
+  // Restore is triggered once after Tabulator fires tableBuilt (data already loaded,
+  // filterMode already applied to column definitions). Only values need setting here.
+  $effect(() => {
+    if (!tabulatorReady || restoreComplete) return;
+    restoreComplete = true;
+
+    if (!savedState) return;
+
+    // Restore header filter values (columns already have headerFilter because
+    // filterMode was initialized from savedState before Tabulator built the table)
+    for (const f of savedState.filters ?? []) {
+      (tableRef as any).setHeaderFilter(f.field, f.value);
+    }
+
+    // Restore sort
+    if (savedState.sorters?.length) {
+      (tableRef as any).setSort(savedState.sorters);
+    }
+
+    // Restore loaded row count
+    const threshold = serverConfig.config?.reload_all_threshold as number | undefined;
+    const savedCount = savedState.rowCount ?? 0;
+    if (savedCount > rowCount) {
+      if (threshold === undefined || savedCount <= threshold) {
+        loadMore(savedCount - rowCount);
+      } else {
+        bannerRowCount = savedCount;
+      }
+    }
+  });
 
   // ── Column mapping ─────────────────────────────────────────────────────────
   // columns.field may be a plain name ("title"), a Model.field notation
@@ -320,7 +388,7 @@
 
     // Trigger just arrived (first time): reset initialized so DataTable mounts
     // fresh with real data instead of via replaceData() on a height=0 instance.
-    if (waitingForTrigger) initialized = false;
+    if (waitingForTrigger) { initialized = false; tabulatorReady = false; }
     waitingForTrigger = false;
 
 
@@ -449,6 +517,7 @@
       // filteredCount resets automatically via onFiltered when clearHeaderFilter fires dataFiltered
     }
     filterMode = !filterMode;
+    saveViewState();
   }
 
   function toggleSelect() {
@@ -465,10 +534,16 @@
     rowCount = count;
     filteredCount = null; // new data load resets any filter count
     onEvent?.('data_load', { count });
+    saveViewState();
   }
 
   function handleFiltered(count: number) {
     filteredCount = count < rowCount ? count : null;
+    saveViewState();
+  }
+
+  function handleSorted() {
+    saveViewState();
   }
 
   function handleSelectionChange(rows: unknown[]) {
@@ -550,6 +625,19 @@
     </div>
   </div>
 
+  <!-- ── Restore banner — shown when saved rowCount exceeds reload_all_threshold ── -->
+  {#if bannerRowCount !== null}
+    <div class="cf-dv-restore-banner">
+      <span>Erano caricate {bannerRowCount} righe.</span>
+      <button class="cf-dv-btn" onclick={() => { const n = bannerRowCount! - rowCount; bannerRowCount = null; loadMore(n > 0 ? n : 0); }}>
+        Ricarica {bannerRowCount}
+      </button>
+      <button class="cf-dv-btn" onclick={() => { bannerRowCount = null; saveViewState(); }}>
+        Mantieni {rowCount}
+      </button>
+    </div>
+  {/if}
+
   <!-- ── Data body ───────────────────────────────────────────────────────── -->
   <div class="cf-dv-body">
     {#if waitingForTrigger}
@@ -580,6 +668,8 @@
         onSelectionChange={handleSelectionChange}
         onDataLoaded={handleDataLoaded}
         onFiltered={handleFiltered}
+        onSorted={handleSorted}
+        onReady={() => { tabulatorReady = true; }}
       />
     {/if}
   </div>
@@ -641,6 +731,24 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+  }
+
+  /* ── Restore banner ──────────────────────────────────────────────────── */
+
+  .cf-dv-restore-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.75rem;
+    background: color-mix(in srgb, var(--cf-accent, #3b82f6) 8%, var(--cf-bg));
+    border-bottom: 1px solid color-mix(in srgb, var(--cf-accent, #3b82f6) 25%, transparent);
+    font-size: 0.72rem;
+    flex-shrink: 0;
+  }
+
+  .cf-dv-restore-banner span {
+    color: var(--cf-text-subtle);
+    flex: 1;
   }
 
   /* ── Toolbar ─────────────────────────────────────────────────────────── */

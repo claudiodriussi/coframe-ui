@@ -1,62 +1,20 @@
 <script lang="ts">
   /**
-   * DataTable.svelte — Tabulator.js wrapper with Svelte 5 interface
+   * DataTable.svelte — thin Svelte 5 wrapper around CoframeTable.
    *
-   * Props:
-   *   data             any[]                   row data
-   *   columns          ColumnDef[]             column definitions
-   *   selectable       boolean                 checkbox selection column (default: false)
-   *   mode             'virtual' | 'page'      virtual scroll or local pagination (default: virtual)
-   *   pageSize         number                  rows per page — only for mode='page' (default: 20)
-   *   rowHeight        number                  row height in px — useful for virtual scroll (optional)
-   *   initialSort      SortDef[]               initial sort order
-   *   treeMode         boolean                 enable Tabulator dataTree (nested children array)
-   *   treeChildField   string                  field name for nested children (default: 'children')
-   *   treeStartExpanded boolean                expand all tree nodes on load (default: false)
+   * Responsibilities:
+   *   - Declares and owns the container <div> (bind:this)
+   *   - Translates reactive Svelte props into CoframeTable method calls via $effects
+   *   - Manages Svelte lifecycle (onMount / onDestroy)
+   *   - Re-exports shared types so consumers import from one place
    *
-   * Methods exposed via bind:this:
-   *   download(format, filename?)              download CSV or JSON
-   *   setData(data)                            replace data
-   *   clearSelection()                         deselect all rows
-   *   getSelectedData()                        return selected rows array
-   *
-   * Callbacks:
-   *   onRowClick(rowData)                      click on a row (not on the checkbox)
-   *   onCellClick(rowData, field, value)       click on a specific cell (not on the checkbox)
-   *   onSelectionChange(rowsData[])            checkbox selection change
-   *   onDataLoaded(count)                      data loaded or updated
+   * All Tabulator logic (column building, event wiring, keyboard nav,
+   * ResizeObserver, _meta system) lives in CoframeTable.ts.
    */
   import { onMount, onDestroy } from 'svelte';
   import 'tabulator-tables/dist/css/tabulator.min.css';
-
-  // ── Public types ───────────────────────────────────────────────────────────
-
-  export interface ColumnDef {
-    field: string;
-    title?: string;
-    width?: number | string;
-    minWidth?: number;
-    maxWidth?: number;
-    frozen?: boolean;
-    hozAlign?: 'left' | 'center' | 'right';
-    formatter?: string | ((cell: any, params: any) => string | HTMLElement);
-    formatterParams?: Record<string, unknown>;
-    sorter?: string;
-    visible?: boolean;
-    headerSort?: boolean;
-    cssClass?: string;
-  }
-
-  export interface SortDef {
-    field: string;
-    dir: 'asc' | 'desc';
-  }
-
-  export interface CellInfo {
-    field: string;
-    value: unknown;
-    row: any;
-  }
+  import { CoframeTable } from '../tabulator/CoframeTable';
+  import type { ColumnDef, SortDef, CellInfo } from '../tabulator/CoframeTable';
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -77,6 +35,8 @@
     onSelectionChange = undefined as ((rows: any[]) => void) | undefined,
     onDataLoaded = undefined as ((count: number) => void) | undefined,
     onFiltered = undefined as ((count: number) => void) | undefined,
+    onSorted = undefined as (() => void) | undefined,
+    onReady = undefined as (() => void) | undefined,
   }: {
     data?: any[];
     columns?: ColumnDef[];
@@ -94,306 +54,69 @@
     onSelectionChange?: (rows: any[]) => void;
     onDataLoaded?: (count: number) => void;
     onFiltered?: (count: number) => void;
+    onSorted?: () => void;
+    onReady?: () => void;
   } = $props();
 
   // ── Internal state ─────────────────────────────────────────────────────────
 
   let container: HTMLDivElement;
-  let table: any = null;
-  let tableReady = false;   // true only after Tabulator fires 'tableBuilt'
-  let observer: ResizeObserver | null = null;
-
-  // ── Keyboard navigation ────────────────────────────────────────────────────
-  // Plain variables (not reactive) — we manage the DOM class directly.
-  // activeRow:   RowComponent reference for getNextRow/getPrevRow via display order
-  // activeRowId: stable row identity (id field) for re-applying CSS after virtual
-  //              scroll element recycling (renderRow event)
-
-  let activeRow: any = null;
-  let activeRowId: unknown = null;
-
-  function setActiveRow(row: any) {
-    if (activeRow) {
-      try { activeRow.getElement().classList.remove('cf-row-active'); } catch (_) {}
-    }
-    activeRow = row;
-    activeRowId = row.getData()?.id ?? null;
-    try { row.getElement().classList.add('cf-row-active'); } catch (_) {}
-    onRowClick?.(row.getData());
-  }
-
-  function handleKeyNav(e: KeyboardEvent) {
-    if (!table) return;
-
-    // Space — toggle checkbox on active row (only in select mode)
-    if (e.key === ' ' && selectable && activeRow) {
-      e.preventDefault();
-      activeRow.toggleSelect();
-      return;
-    }
-
-    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-    e.preventDefault();
-
-    const displayRows: any[] = table.getRows('active') ?? [];
-    if (displayRows.length === 0) return;
-
-    if (!activeRow) {
-      setActiveRow(displayRows[0]);
-      try { displayRows[0].scrollTo('top', false); } catch (_) {}
-      return;
-    }
-
-    const currentIdx = displayRows.indexOf(activeRow);
-    const fromIdx = currentIdx === -1 ? 0 : currentIdx;
-    const nextIdx = e.key === 'ArrowDown' ? fromIdx + 1 : fromIdx - 1;
-    if (nextIdx >= 0 && nextIdx < displayRows.length) {
-      setActiveRow(displayRows[nextIdx]);
-      // 'bottom' when going down: new row appears at bottom of viewport (not top)
-      // 'top'    when going up:   new row appears at top of viewport
-      // ifVisible=false: skip scroll if row is already in view
-      const pos = e.key === 'ArrowDown' ? 'bottom' : 'top';
-      try { displayRows[nextIdx].scrollTo(pos, false); } catch (_) {}
-    }
-  }
-
-  // ── Tabulator config builder ───────────────────────────────────────────────
-
-  function buildColumns(): any[] {
-    const cols: any[] = [];
-
-    if (selectable) {
-      cols.push({
-        // rowSelection formatter handles checkbox rendering and toggleSelect()
-        // internally, with e.stopPropagation() so row-level click doesn't fire.
-        // We do NOT add a custom cellClick here — that was causing double-toggle.
-        formatter: 'rowSelection',
-        titleFormatter: 'rowSelection',
-        hozAlign: 'center',
-        headerHozAlign: 'center',
-        headerSort: false,
-        width: 44,
-        minWidth: 44,
-        maxWidth: 44,
-        frozen: true,
-        cssClass: 'cf-col-select',
-      });
-    }
-
-    for (const c of columns) {
-      const col: any = {
-        field: c.field,
-        title: c.title ?? c.field,
-        hozAlign: c.hozAlign ?? 'left',
-        headerSort: c.headerSort !== false,
-        visible: c.visible !== false,
-      };
-      if (filterMode) {
-        col.headerFilter = 'input';
-        col.headerFilterPlaceholder = ' ';
-      }
-      if (c.width !== undefined)         col.width = c.width;
-      if (c.minWidth !== undefined)      col.minWidth = c.minWidth;
-      if (c.maxWidth !== undefined)      col.maxWidth = c.maxWidth;
-      if (c.frozen)                      col.frozen = true;
-      if (c.formatter)                   col.formatter = c.formatter;
-      if (c.formatterParams)             col.formatterParams = c.formatterParams;
-      if (c.sorter)                      col.sorter = c.sorter;
-      if (c.cssClass)                    col.cssClass = c.cssClass;
-      cols.push(col);
-    }
-
-    return cols;
-  }
-
-  function buildOptions(): any {
-    const opts: any = {
-      data,
-      columns: buildColumns(),
-      // "100%" → Tabulator sets the root element to 100% of the container and
-      // internally computes tableHolder = total - header - footer.
-      // A numeric (px) value would control only the tableHolder, causing
-      // overflow that triggers the ResizeObserver → feedback loop → blank screen.
-      height: '100%',
-      layout: 'fitDataStretch',
-      headerSort: true,
-      movableColumns: true,
-      resizableColumnFit: false,
-      selectableRows: true,
-      placeholder: 'No data to display',
-      scrollToRowPosition: 'nearest',
-      scrollToRowIfVisible: false,  // false = skip scroll when row is already visible
-    };
-
-    if (mode === 'page') {
-      opts.pagination = true;
-      opts.paginationMode = 'local';
-      opts.paginationSize = pageSize;
-      opts.paginationSizeSelector = [10, 20, 50, 100];
-    }
-
-    if (rowHeight) opts.rowHeight = rowHeight;
-
-    if (treeMode) {
-      opts.dataTree = true;
-      opts.dataTreeChildField = treeChildField;
-      opts.dataTreeStartExpanded = treeStartExpanded;
-    }
-
-    if (initialSort.length > 0) {
-      opts.initialSort = initialSort.map((s) => ({ column: s.field, dir: s.dir }));
-    }
-
-    return opts;
-  }
+  let cfTable: CoframeTable | null = null;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   onMount(async () => {
-    const { TabulatorFull } = await import('tabulator-tables');
-
-    // Force a synchronous layout reflow so the browser computes the flex/height
-    // chain before Tabulator reads container dimensions. Without this, in nested
-    // flex layouts with height:100%, the container reports offsetHeight=0 during
-    // the microtask that follows `await import()`. Tabulator then sets the
-    // tableholder to 0px (or auto), all rows render at natural height, and the
-    // container's overflow:hidden clips them — no scrollbar, no scroll.
-    void container.offsetHeight;
-
-    table = new TabulatorFull(container, buildOptions());
-
-    // cellClick — captures row and column; skips the checkbox column (empty field)
-    table.on('cellClick', (_e: MouseEvent, cell: any) => {
-      const field: string = cell.getField();
-      if (!field) return; // rowSelection column has no field
-      const rowComp = cell.getRow();
-      onCellClick?.({ field, value: cell.getValue(), row: rowComp.getData() });
-      setActiveRow(rowComp);
+    cfTable = await CoframeTable.create(container, {
+      data, columns, selectable, filterMode, mode, pageSize, rowHeight: rowHeight,
+      initialSort, treeMode, treeChildField, treeStartExpanded,
+      onRowClick, onCellClick, onSelectionChange, onDataLoaded, onFiltered, onSorted, onReady,
     });
-
-    // Selection listeners are always registered so they work when selectable
-    // is toggled on after mount. Guards inside each handler check current value.
-    let _savedSel: any[] = [];
-    let _restoringsel = false;
-
-    table.on('rowMouseDown', (_e: MouseEvent, _row: any) => {
-      if (selectable) _savedSel = table.getSelectedData();
-    });
-
-    // rowClick fires after Tabulator has already single-selected the clicked row.
-    // When selectable is off: deselect immediately (no visible selection UI).
-    // When selectable is on: skip checkbox column clicks; restore pre-click
-    // selection for data-cell clicks so only checkboxes affect selection.
-    table.on('rowClick', (e: MouseEvent, _row: any) => {
-      if (!selectable) { table.deselectRow(); return; }
-      if ((e.target as HTMLElement)?.closest('.cf-col-select')) return;
-      _restoringsel = true;
-      table.deselectRow();
-      _savedSel.forEach((d: any) => table.selectRow(d.id));
-      _restoringsel = false;
-    });
-
-    table.on('rowSelectionChanged', (selectedData: any[]) => {
-      if (_restoringsel) return;
-      onSelectionChange?.(selectedData);
-    });
-
-    table.on('dataLoaded', (loadedData: any[]) => {
-      activeRow = null;
-      activeRowId = null;
-      onDataLoaded?.(loadedData.length);
-    });
-
-    table.on('dataFiltered', (_filters: any[], rows: any[]) => {
-      onFiltered?.(rows.length);
-    });
-
-    // Re-apply active row CSS class when virtual scroll recycles row elements.
-    // Without this, scrolling away and back would lose the visual highlight.
-    table.on('renderRow', (row: any) => {
-      if (activeRowId === null) return;
-      const el = row.getElement();
-      if (row.getData()?.id === activeRowId) {
-        el.classList.add('cf-row-active');
-      } else {
-        el.classList.remove('cf-row-active');
-      }
-    });
-
-    // tableBuilt fires when Tabulator has finished initializing all its modules.
-    // Only after this event is it safe to call redraw() or other layout methods.
-    table.on('tableBuilt', () => {
-      tableReady = true;
-    });
-
-    // Keyboard ↑/↓ navigation — fires same onRowClick as mouse click
-    container.addEventListener('keydown', handleKeyNav);
-
-    // ResizeObserver: notifies Tabulator of container resizes (e.g. SplitPane).
-    // Guard with tableReady: observe() can fire synchronously on some browsers
-    // before tableBuilt, when table is assigned but internal DOM is not ready.
-    observer = new ResizeObserver(() => {
-      if (tableReady) table.redraw(true);
-    });
-    observer.observe(container);
   });
 
   onDestroy(() => {
-    observer?.disconnect();
-    container.removeEventListener('keydown', handleKeyNav);
-    table?.destroy();
-    table = null;
+    cfTable?.destroy();
+    cfTable = null;
   });
 
-  // ── Prop reactivity → Tabulator ───────────────────────────────────────────
-  // $effect tracks only reactive props (data, columns); `table` is a plain let
-  // so it is not tracked — the effect does not re-run when table is assigned
-  // in onMount. On the first run table is null → no-op. Fires only on later changes.
+  // ── Reactive prop → CoframeTable ───────────────────────────────────────────
+  // `cfTable` is a plain `let` (not $state) so it is not tracked by $effects.
+  // Each effect reads only the props it cares about; the first run is a no-op
+  // (cfTable is null until onMount resolves).
 
   $effect(() => {
-    // Read `data` unconditionally so Svelte 5 tracks it even when table is
-    // still null (async onMount with await import hasn't completed yet).
+    // Track `data` unconditionally before the null guard so Svelte registers
+    // the dependency even when cfTable is not yet initialised.
     const _data = data;
-    if (table) table.replaceData(_data);
+    cfTable?.setData(_data);
   });
 
   $effect(() => {
-    void selectable;   // re-run when checkbox column toggled on/off
-    void filterMode;   // re-run when filter inputs added/removed (Tabulator recalcs header height)
-    const cols = buildColumns();
-    if (table) table.setColumns(cols);
+    void selectable;   // re-run when checkbox column toggled
+    void filterMode;   // re-run when filter inputs added/removed
+    cfTable?.updateColumns(columns, selectable, filterMode);
   });
 
-  // ── Public API (bind:this={ref} → ref.download / ref.setData / ...) ──────
+  // ── Public API (bind:this → caller) ───────────────────────────────────────
 
-  export function download(format: 'csv' | 'json', filename = `export.${format}`) {
-    table?.download(format, filename);
+  export function download(format: 'csv' | 'json', filename = `export.${format}`, options?: any, range?: string) {
+    cfTable?.download(format, filename, options, range);
   }
 
-  export function setData(newData: any[]) {
-    table?.replaceData(newData);
-  }
+  export function setData(newData: any[])          { cfTable?.setData(newData); }
+  export function clearSelection()                 { cfTable?.clearSelection(); }
+  export function clearHeaderFilter()              { cfTable?.clearHeaderFilter(); }
+  export function clearSort()                      { cfTable?.clearSort(); }
+  export function getSelectedData(): any[]         { return cfTable?.getSelectedData() ?? []; }
+  export function getHeaderFilters(): any[]        { return cfTable?.getHeaderFilters() ?? []; }
+  export function setHeaderFilter(field: string, value: unknown) { cfTable?.setHeaderFilter(field, value); }
+  export function getSorters(): Array<{ field: string; dir: string }> { return cfTable?.getSorters() ?? []; }
+  export function setSort(sorters: Array<{ field: string; dir: string }>) { cfTable?.setSort(sorters); }
+  export function selectRowsByIds(ids: unknown[])  { cfTable?.selectRowsByIds(ids); }
+  export function getRowMeta(id: unknown): Record<string, unknown> { return cfTable?.getRowMeta(id) ?? {}; }
+  export function setRowMeta(id: unknown, updates: Record<string, unknown>) { cfTable?.setRowMeta(id, updates); }
 
-  export function clearSelection() {
-    table?.deselectRow();
-  }
-
-  export function clearHeaderFilter() {
-    table?.clearHeaderFilter();
-  }
-
-  export function getSelectedData(): any[] {
-    return table?.getSelectedData() ?? [];
-  }
-
-  // Append rows to the existing dataset, respecting the current sort order.
-  // Returns the new total row count. Fires onDataLoaded with the updated count.
   export async function addRows(newRows: any[]): Promise<number> {
-    if (!table) return 0;
-    await table.addData(newRows);
-    const total: number = table.getDataCount();
-    onDataLoaded?.(total);
-    return total;
+    return cfTable?.addRows(newRows) ?? 0;
   }
 </script>
 

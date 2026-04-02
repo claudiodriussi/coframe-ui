@@ -35,7 +35,7 @@
   type PassSpec = '*' | string[] | Record<string, string>;
 
   interface TriggerConfig {
-    on: string;
+    event: string;
     from?: string;    // source area id; default: 'content'
     pass?: PassSpec;
   }
@@ -86,7 +86,7 @@
     for (const area of areas) {
       const trig = area.trigger;
       if (!trig) continue;
-      if (trig.on === eventName && (trig.from ?? 'content') === sourceId) {
+      if (trig.event === eventName && (trig.from ?? 'content') === sourceId) {
         triggerMap = { ...triggerMap, [area.id]: extractPass(trig.pass, data) };
       }
     }
