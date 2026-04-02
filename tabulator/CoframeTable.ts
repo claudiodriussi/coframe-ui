@@ -217,6 +217,9 @@ export class CoframeTable {
       t.deselectRow();
       this._savedSel.forEach((d: any) => t.selectRow(d.id));
       this._restoringsel = false;
+      // rowSelectionChanged was suppressed during restore; notify with the actual
+      // (unchanged) selection so consumers (e.g. saveViewState) have the correct state.
+      cfg.onSelectionChange?.(this._savedSel);
     });
 
     t.on('rowSelectionChanged', (selectedData: any[]) => {

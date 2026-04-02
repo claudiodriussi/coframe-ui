@@ -19,6 +19,7 @@
    *   data     any[]                     static data (source: prop)
    *   onEvent  (name, data) => void      unified event emitter (row_click, data_load, …)
    */
+  import { untrack } from 'svelte';
   import DataTable from './DataTable.svelte';
   import type { ColumnDef } from '$coframe/tabulator/CoframeTable';
   import { api } from '$coframe/api/client';
@@ -92,6 +93,8 @@
     filters: Array<{ field: string; type: string; value: unknown }>;
     sorters: Array<{ field: string; dir: string }>;
     rowCount: number;
+    selectMode: boolean;
+    selectedIds: unknown[];
   }
 
   // ── Trigger helpers ────────────────────────────────────────────────────────
@@ -171,10 +174,10 @@
   let error = $state<string | null>(null);
   let initialized = $state(false);
   let waitingForTrigger = $state(false);
-  // Filter + selection modes — filterMode initialized from savedState so Tabulator
-  // builds columns with headerFilter inputs already present on first render.
+  // Filter + selection modes — both initialized from savedState so Tabulator
+  // builds columns (headerFilter inputs, checkbox column) correctly on first render.
   let filterMode = $state(savedState?.filterMode ?? false);
-  let selectMode = $state(false);
+  let selectMode = $state(savedState?.selectMode ?? false);
   let filteredCount = $state<number | null>(null);  // null = no active filter
   let selectedCount = $state(0);
   // State persistence
@@ -184,35 +187,31 @@
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  // Rows per page load — cascade:
-  //   1. source.limit in view YAML       (per-view override)
-  //   2. serverConfig.config.page_size   (config.yaml dataview.page_size)
-  //   3. DEFAULT_PAGE_SIZE               (frontend fallback, 100)
-  // Trees always load completely (buildTree needs the full flat list).
-  const pageSize = $derived(
-    view.source?.limit !== undefined
-      ? Number(view.source.limit)
-      : Number(serverConfig.config?.page_size ?? DEFAULT_PAGE_SIZE)
-  );
-
   // True when the server has more rows than Tabulator currently holds.
   const hasMore = $derived(
     view.type !== 'tree' && totalCount !== null && rowCount < totalCount
   );
 
   function saveViewState() {
-    if (!restoreComplete || !tableRef) return;
+    if (!tabulatorReady || !tableRef) return;
     const state: SavedViewState = {
       filterMode,
       filters: (tableRef as any).getHeaderFilters(),
       sorters: (tableRef as any).getSorters(),
       rowCount,
+      selectMode,
+      selectedIds: (tableRef as any).getSelectedData()
+        .map((r: any) => r.id)
+        .filter((id: any) => id != null),
     };
     try { localStorage.setItem(getStateKey(), JSON.stringify(state)); } catch (_) {}
   }
 
-  // Restore is triggered once after Tabulator fires tableBuilt (data already loaded,
-  // filterMode already applied to column definitions). Only values need setting here.
+  // Restore effect — runs once as soon as tabulatorReady.
+  // Reads reload_all_threshold from serverConfig with whatever value is available
+  // at this moment (serverConfig loads eagerly; in most cases it is already loaded
+  // by the time Tabulator fires tableBuilt). untrack() in loadData prevents a
+  // serverConfig-triggered loadData re-run that would overwrite restored rows.
   $effect(() => {
     if (!tabulatorReady || restoreComplete) return;
     restoreComplete = true;
@@ -230,7 +229,12 @@
       (tableRef as any).setSort(savedState.sorters);
     }
 
-    // Restore loaded row count
+    // Restore selections (selectMode + checkbox column already applied via prop init)
+    if (savedState.selectedIds?.length) {
+      (tableRef as any).selectRowsByIds(savedState.selectedIds);
+    }
+
+    // Restore row count: silent if savedCount ≤ threshold, banner if above.
     const threshold = serverConfig.config?.reload_all_threshold as number | undefined;
     const savedCount = savedState.rowCount ?? 0;
     if (savedCount > rowCount) {
@@ -360,7 +364,13 @@
     const isCollapsed = collapsed;  // track collapse — skip load when panel is hidden
     const viewType = view.type;
     const treeCfg = view.tree;
-    const _ps = pageSize;           // track: re-runs if source.limit changes
+    // page size — track view.source.limit reactively, but read serverConfig via
+    // untrack so that config loading after mount does NOT re-run this effect and
+    // overwrite rows that were already loaded (including loadMore rows).
+    const _viewLimit = view.source?.limit;   // tracked
+    const _ps = _viewLimit !== undefined
+      ? Number(_viewLimit)
+      : untrack(() => Number(serverConfig.config?.page_size ?? DEFAULT_PAGE_SIZE));
 
 
     // Reset server-side total on every fresh load
@@ -491,6 +501,9 @@
       // loadMore errors are non-fatal — existing data remains intact
     } finally {
       loadingMore = false;
+      // Save state after addData has fully settled: rowCount is updated and any
+      // transient rowSelectionChanged=[] fired by Tabulator during addData is gone.
+      saveViewState();
     }
   }
 
@@ -521,11 +534,8 @@
   }
 
   function toggleSelect() {
-    if (selectMode) {
-      tableRef?.clearSelection();
-      selectedCount = 0;
-    }
     selectMode = !selectMode;
+    saveViewState();
   }
 
   // ── Internal callbacks ─────────────────────────────────────────────────────
@@ -534,7 +544,10 @@
     rowCount = count;
     filteredCount = null; // new data load resets any filter count
     onEvent?.('data_load', { count });
-    saveViewState();
+    // Skip saveViewState during loadMore: Tabulator may fire rowSelectionChanged
+    // with [] during addData (internal reset), which would overwrite saved selections.
+    // loadMore() calls saveViewState() in its finally block after addData completes.
+    if (!loadingMore) saveViewState();
   }
 
   function handleFiltered(count: number) {
@@ -549,6 +562,7 @@
   function handleSelectionChange(rows: unknown[]) {
     selectedCount = rows.length;
     onEvent?.('selection_change', rows);
+    saveViewState();
   }
 </script>
 
