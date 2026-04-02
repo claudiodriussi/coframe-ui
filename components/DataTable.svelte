@@ -71,6 +71,9 @@
       initialSort, treeMode, treeChildField, treeStartExpanded,
       onRowClick, onCellClick, onSelectionChange, onDataLoaded, onFiltered, onSorted, onReady,
     });
+    // Re-apply columns in case they changed while create() was awaiting
+    // (e.g. inferred alignments/formatters set by DataView after first data load).
+    cfTable.updateColumns(columns, selectable, filterMode);
   });
 
   onDestroy(() => {
@@ -91,9 +94,10 @@
   });
 
   $effect(() => {
-    void selectable;   // re-run when checkbox column toggled
-    void filterMode;   // re-run when filter inputs added/removed
-    cfTable?.updateColumns(columns, selectable, filterMode);
+    const _cols = columns; // track unconditionally before cfTable null-guard
+    void selectable;       // re-run when checkbox column toggled
+    void filterMode;       // re-run when filter inputs added/removed
+    cfTable?.updateColumns(_cols, selectable, filterMode);
   });
 
   // ── Public API (bind:this → caller) ───────────────────────────────────────

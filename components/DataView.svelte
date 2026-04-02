@@ -44,7 +44,9 @@
     width?: number | string;
     minWidth?: number;
     maxWidth?: number;
-    hozAlign?: 'left' | 'center' | 'right';
+    hozAlign?: 'left' | 'center' | 'right';  // Tabulator native
+    align?: 'left' | 'center' | 'right';      // user-friendly alias for hozAlign
+    formatter?: 'date' | 'datetime' | 'time' | string;
     visible?: boolean;
     frozen?: boolean;
     [key: string]: unknown;
@@ -85,6 +87,20 @@
   const DEFAULT_PAGE_SIZE = 100;
   // Batch sizes offered in the "load more" dropdown
   const LOAD_MORE_OPTIONS = [50, 100, 500];
+
+  // Named date/time formatters for YAML `formatter: date|datetime|time`.
+  // Normalize "2024-03-15 10:30:00" (Python) → ISO "T" separator before parsing.
+  function _parseDate(val: unknown): Date | null {
+    if (val == null || val === '') return null;
+    const s = typeof val === 'string' ? val.replace(' ', 'T') : String(val);
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const DATE_FORMATTERS: Record<string, (cell: any, params: any) => string> = {
+    date:     (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleDateString()  : String(cell.getValue() ?? ''); },
+    datetime: (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleString()      : String(cell.getValue() ?? ''); },
+    time:     (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleTimeString()  : String(cell.getValue() ?? ''); },
+  };
 
   // ── View state persistence ─────────────────────────────────────────────────
 
@@ -152,14 +168,29 @@
 
   // ── View state persistence (key + initial load) ────────────────────────────
   // Computed before internal state so filterMode can be initialized from savedState.
+  //
+  // Two-level persistence model:
+  //   - reload (F5)     → restore full session state (filters, sort, selections, rowCount)
+  //   - navigate (menu) → start fresh (savedState = null)
+  // Future "user preferences" (column widths, default sort…) will be a separate
+  // persistence layer with a different key and lifetime.
 
   function getStateKey(): string {
     return `dataview.${view.source?.model ?? (view.source as any)?.endpoint ?? 'custom'}`;
   }
 
+  const isReload = (() => {
+    try {
+      const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+      return nav?.type === 'reload';
+    } catch { return false; }
+  })();
+
   const savedState: SavedViewState | null = (() => {
-    try { return JSON.parse(localStorage.getItem(getStateKey()) ?? 'null') as SavedViewState; }
-    catch { return null; }
+    try {
+      if (!isReload) return null;  // navigation → start fresh
+      return JSON.parse(localStorage.getItem(getStateKey()) ?? 'null') as SavedViewState;
+    } catch { return null; }
   })();
 
   // ── Internal state ─────────────────────────────────────────────────────────
@@ -167,6 +198,14 @@
   let tableRef: DataTable | null = $state(null);
   let rows: unknown[] = $state([]);
   let rowCount = $state(0);
+  // Auto-inferred column props (from first data row). Set once; explicit YAML always overrides.
+  //   numeric  → hozAlign: right
+  //   ISO date/datetime string → locale formatter name ('date' | 'datetime')
+  // NOTE: store only strings, not functions — $state wraps objects with Proxy
+  // and function values inside proxied Records may break when called by Tabulator.
+  let inferredAligns    = $state<Record<string, 'left' | 'right'>>({});
+  let inferredFormatters = $state<Record<string, string>>({});
+  let alignsInferred    = $state(false);
   let totalCount = $state<number | null>(null);
   let loading = $state(false);
   let loadingMore = $state(false);
@@ -246,6 +285,32 @@
     }
   });
 
+  // ── Auto-infer column props from first data row ────────────────────────────
+  // Called inline in loadData (before initialized = true) so columnDefs is
+  // already correct when DataTable mounts — avoids post-mount setColumns calls.
+  // numeric  → hozAlign right
+  // ISO date/datetime string → locale formatter name ('date'|'datetime')
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}/;
+  function _inferColumnTypes(data: unknown[]) {
+    if (alignsInferred || data.length === 0) return;
+    const first = data[0] as Record<string, unknown>;
+    const aligns: Record<string, 'left' | 'right'> = {};
+    const formatters: Record<string, string> = {};
+    for (const [k, v] of Object.entries(first)) {
+      if (k === '_meta') continue;
+      if (typeof v === 'number') {
+        aligns[k] = 'right';
+      } else if (typeof v === 'string' && ISO_DATE_RE.test(v)) {
+        // Python datetimes arrive as "2024-03-15 10:30:00" (space, not T)
+        const hasTime = v.includes('T') || /\d{2}:\d{2}/.test(v.slice(10));
+        formatters[k] = hasTime ? 'datetime' : 'date';
+      }
+    }
+    inferredAligns    = aligns;
+    inferredFormatters = formatters;
+    alignsInferred    = true;
+  }
+
   // ── Column mapping ─────────────────────────────────────────────────────────
   // columns.field may be a plain name ("title"), a Model.field notation
   // ("Author.first_name"), or a full QB select expression with alias
@@ -265,14 +330,23 @@
   const columnDefs = $derived.by((): ColumnDef[] => {
     if (!view.columns || view.columns.length === 0) return [];
     return view.columns.map(c => {
+      const fieldKey = extractFieldKey(c.field);
       const def: ColumnDef = {
-        field: extractFieldKey(c.field),
-        title: c.title ?? extractFieldKey(c.field),
+        field: fieldKey,
+        title: c.title ?? fieldKey,
       };
       if (c.width !== undefined)    def.width = c.width as number | string;
       if (c.minWidth !== undefined) def.minWidth = c.minWidth;
       if (c.maxWidth !== undefined) def.maxWidth = c.maxWidth;
-      if (c.hozAlign)               def.hozAlign = c.hozAlign;
+      // Priority: YAML align > hozAlign (Tabulator legacy) > auto-inferred from data type
+      const align = (c.align as 'left' | 'center' | 'right' | undefined)
+        ?? c.hozAlign
+        ?? inferredAligns[fieldKey];
+      if (align) def.hozAlign = align;
+      // formatter: YAML name resolved to function via DATE_FORMATTERS (else raw string for
+      // Tabulator built-ins), else inferred format name resolved to function. YAML wins.
+      const fmtName = c.formatter ?? inferredFormatters[fieldKey];
+      if (fmtName) def.formatter = DATE_FORMATTERS[fmtName] ?? fmtName;
       if (c.visible === false)      def.visible = false;
       if (c.frozen)                 def.frozen = true;
       return def;
@@ -380,6 +454,7 @@
     if (pd !== undefined) {
       waitingForTrigger = false;
       rows = pd;
+      _inferColumnTypes(pd);
       initialized = true;
       return;
     }
@@ -418,6 +493,7 @@
               data = buildTree(data, treeCfg.parent_field, treeCfg.child_field ?? 'children');
             }
             rows = data;
+            _inferColumnTypes(rows);
           } else {
             error = res.message ?? 'Query failed';
             rows = [];
@@ -430,6 +506,7 @@
           if (res.status === 'success') {
             const d = res.data as { records: unknown[]; total: number };
             rows = Array.isArray(d.records) ? d.records : [];
+            _inferColumnTypes(rows);
             totalCount = d.total ?? null;
           } else {
             error = res.message ?? 'Query failed';
@@ -456,6 +533,7 @@
         const res = await api.endpoint(src.endpoint, params);
         if (res.status === 'success') {
           rows = Array.isArray(res.data) ? res.data : [];
+          _inferColumnTypes(rows);
         } else {
           error = res.message ?? 'Endpoint call failed';
           rows = [];
