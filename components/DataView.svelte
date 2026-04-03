@@ -21,7 +21,7 @@
   import type { ColumnDef } from '$coframe/tabulator/CoframeTable';
   import { api } from '$coframe/api/client';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
-  import { formatterRegistry } from '$coframe/formatters/registry';
+  import { resolveFormatter } from '$coframe/formatters/registry';
   import {
     extractFieldKey,
     applyTriggerVars,
@@ -45,36 +45,6 @@
 
   // Last-resort fallback if serverConfig hasn't loaded yet or config.yaml has no dataview section.
   const DEFAULT_PAGE_SIZE = 100;
-
-  // Named date/time formatters for YAML `formatter: date|datetime|time`.
-  // Normalize "2024-03-15 10:30:00" (Python) → ISO "T" separator before parsing.
-  function _parseDate(val: unknown): Date | null {
-    if (val == null || val === '') return null;
-    const s = typeof val === 'string' ? val.replace(' ', 'T') : String(val);
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  const DATE_FORMATTERS: Record<string, (cell: any, params: any) => string> = {
-    date:     (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleDateString()  : String(cell.getValue() ?? ''); },
-    datetime: (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleString()      : String(cell.getValue() ?? ''); },
-    time:     (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleTimeString()  : String(cell.getValue() ?? ''); },
-  };
-
-  // Shorthand param schemas for Tabulator built-in formatters.
-  // `formatter: star,5` → name='star', formatterParams={ stars: 5 }
-  const TABULATOR_SHORTHAND: Record<string, (args: string[]) => Record<string, unknown>> = {
-    star:     ([n])    => ({ stars: Number(n) }),
-    progress: ([a, b]) => ({ min: Number(a ?? 0), max: Number(b ?? 100) }),
-  };
-
-  function _parseFmtShorthand(raw: string): [string, Record<string, unknown> | undefined] {
-    const idx = raw.indexOf(',');
-    if (idx === -1) return [raw, undefined];
-    const name = raw.slice(0, idx).trim();
-    const args = raw.slice(idx + 1).split(',').map(s => s.trim());
-    const parser = formatterRegistry.getShorthand(name) ?? TABULATOR_SHORTHAND[name];
-    return [name, parser ? parser(args) : { args }];
-  }
 
   // ── View state persistence ─────────────────────────────────────────────────
 
@@ -247,10 +217,9 @@
       if (align) def.hozAlign = align;
       const rawFmt = c.formatter ?? inferredFormatters[fieldKey];
       if (rawFmt) {
-        const [fmtName, shorthandParams] = _parseFmtShorthand(rawFmt);
-        def.formatter = DATE_FORMATTERS[fmtName] ?? formatterRegistry.get(fmtName) ?? fmtName;
-        const resolvedParams = c.formatterParams ?? shorthandParams;
-        if (resolvedParams) def.formatterParams = resolvedParams;
+        const resolved = resolveFormatter(rawFmt, c.formatterParams);
+        def.formatter = resolved.formatter;
+        if (resolved.formatterParams) def.formatterParams = resolved.formatterParams;
       } else if (c.formatterParams) {
         def.formatterParams = c.formatterParams;
       }
@@ -460,25 +429,27 @@
 
 <div class="cf-dataview">
 
-  <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
-  <DataViewToolbar
-    {toolbarItems}
-    {filterMode}
-    {selectMode}
-    {loading}
-    {loadingMore}
-    {hasMore}
-    {rowCount}
-    {filteredCount}
-    {totalCount}
-    {selectedCount}
-    {allowViews}
-    {activeViewType}
-    onToggleFilter={toggleFilter}
-    onToggleSelect={toggleSelect}
-    onExport={handleExport}
-    onLoadMore={loadMore}
-  />
+  <!-- ── Toolbar — shown only when there are actions or more rows to load ── -->
+  {#if toolbarItems.length > 0 || hasMore || loadingMore}
+    <DataViewToolbar
+      {toolbarItems}
+      {filterMode}
+      {selectMode}
+      {loading}
+      {loadingMore}
+      {hasMore}
+      {rowCount}
+      {filteredCount}
+      {totalCount}
+      {selectedCount}
+      {allowViews}
+      {activeViewType}
+      onToggleFilter={toggleFilter}
+      onToggleSelect={toggleSelect}
+      onExport={handleExport}
+      onLoadMore={loadMore}
+    />
+  {/if}
 
   <!-- ── Restore banner ─────────────────────────────────────────────────── -->
   {#if bannerRowCount !== null}

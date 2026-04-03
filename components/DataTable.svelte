@@ -167,7 +167,7 @@
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--cf-text-muted);
-    padding: 0.5rem 0.75rem;
+    padding: 0.15rem 0.75rem;
   }
 
   :global(.tabulator-col.tabulator-sortable .tabulator-col-title:hover) {
@@ -231,11 +231,14 @@
     vertical-align: middle;
   }
 
-  /* Header filter inputs — style when visible (rendered only when filterMode=true) */
+  /* Header filter row — compact height, no extra Tabulator padding */
+  :global(.tabulator-header-filter) {
+    padding: 0.05rem 0.4rem !important;
+  }
   :global(.tabulator-header-filter input) {
     width: 100%;
-    padding: 0.15rem 0.35rem;
-    font-size: 0.72rem;
+    padding: 0.1rem 0.3rem;
+    font-size: 0.7rem;
     border: 1px solid var(--cf-border-input);
     border-radius: 0.25rem;
     background: var(--cf-bg);

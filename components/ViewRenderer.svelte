@@ -1,6 +1,7 @@
 <script lang="ts">
   import PluginComponent from './PluginComponent.svelte';
   import DataView from './DataView.svelte';
+  import TabView from './TabView.svelte';
   import type { ViewDescriptor } from './dataview.types';
   import { pluginLoader } from '$app-plugins/registry';
 
@@ -27,6 +28,14 @@
     trigger={trigger}
     collapsed={collapsed}
     onEvent={onEvent}
+  />
+
+{:else if view.type === 'tabs'}
+  <TabView
+    tabs={view.tabs as Array<{ id: string; label?: string; [key: string]: unknown }>}
+    {trigger}
+    {collapsed}
+    {onEvent}
   />
 
 {:else}

@@ -30,25 +30,27 @@
   type CollapseTarget = 'a' | 'b';
 
   let {
-    direction      = 'horizontal',
-    defaultSizes   = [50, 50] as [number, number],
-    minSize        = 0,
-    maxSize        = undefined as number | number[] | undefined,
-    gutterSize     = 6,
-    collapseTarget = 'b',
-    storageKey     = undefined as string | undefined,
-    onCollapse     = undefined as ((isCollapsed: boolean) => void) | undefined,
+    direction        = 'horizontal',
+    defaultSizes     = [50, 50] as [number, number],
+    minSize          = 0,
+    maxSize          = undefined as number | number[] | undefined,
+    gutterSize       = 6,
+    collapseTarget   = 'b',
+    storageKey       = undefined as string | undefined,
+    initialCollapsed = false,
+    onCollapse       = undefined as ((isCollapsed: boolean) => void) | undefined,
     a,
     b,
   }: {
-    direction?:      Direction;
-    defaultSizes?:   [number, number];
-    minSize?:        number | number[];
-    maxSize?:        number | number[];
-    gutterSize?:     number;
-    collapseTarget?: CollapseTarget;
-    storageKey?:     string;
-    onCollapse?:     (isCollapsed: boolean) => void;
+    direction?:        Direction;
+    defaultSizes?:     [number, number];
+    minSize?:          number | number[];
+    maxSize?:          number | number[];
+    gutterSize?:       number;
+    collapseTarget?:   CollapseTarget;
+    storageKey?:       string;
+    initialCollapsed?: boolean;
+    onCollapse?:       (isCollapsed: boolean) => void;
     a: Snippet;
     b: Snippet;
   } = $props();
@@ -59,6 +61,7 @@
   let toggleBtn: HTMLButtonElement | null = null;
 
   // Collapse state (reactive for class:cf-pane-collapsed)
+  // Seeded from initialCollapsed when there is no localStorage entry.
   let collapsed = $state(false);
 
   // Last sizes before collapse (initialised in onMount)
@@ -141,13 +144,32 @@
 
   // — Lifecycle ——————————————————————————————————————————
   onMount(() => {
-    const initial = storeGet() ?? [...defaultSizes];
+    const stored  = storeGet();
+    // localStorage persistence is intentionally bypassed for collapse state:
+    // initialCollapsed always wins. A proper strategy (save px sizes, restore
+    // collapsed flag) will be designed separately.
+    const startCollapsed = initialCollapsed;
+    const initial = stored ?? [...defaultSizes];
     savedSizes = [...initial] as [number, number];
+    if (startCollapsed) collapsed = true;
+
+    // Residual size (px) of the collapsed pane. 0 = fully hidden, leaving only
+    // the gutter button visible. Increase to keep a thin strip showing.
+    const COLLAPSED_SIZE_PX = 0;
+
+    // The collapse target uses COLLAPSED_SIZE_PX as its minimum so
+    // setSizes([100,0]) / setSizes([0,100]) can reach it programmatically.
+    // The other pane keeps the configured minimum to prevent accidental drag-collapse.
+    const minA = Array.isArray(minSize) ? minSize[0] : minSize;
+    const minB = Array.isArray(minSize) ? minSize[1] : minSize;
+    const effectiveMinSize = collapseTarget === 'a'
+      ? [COLLAPSED_SIZE_PX, minB]
+      : [minA, COLLAPSED_SIZE_PX];
 
     const opts: Parameters<typeof Split>[1] = {
       direction,
       sizes:      initial,
-      minSize,
+      minSize:    effectiveMinSize,
       gutterSize,
       snapOffset: 0,   // no automatic snap towards minSize during drag
 
@@ -187,6 +209,12 @@
     if (maxSize !== undefined) opts.maxSize = maxSize;
 
     instance = Split([paneA, paneB], opts);
+
+    if (startCollapsed) {
+      instance.setSizes(collapseTarget === 'a' ? [0, 100] : [100, 0]);
+      syncArrow();
+      onCollapse?.(true);
+    }
   });
 
   onDestroy(() => {

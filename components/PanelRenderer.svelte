@@ -45,6 +45,7 @@
     pos?: 'left' | 'right' | 'top' | 'bottom';
     width?: number;    // px hint for right/left splits
     height?: number;   // px hint for top/bottom splits
+    collapsed?: boolean; // start collapsed (can still be expanded by user)
     trigger?: TriggerConfig;
     [key: string]: unknown;
   }
@@ -168,6 +169,7 @@
           gutterSize={5}
           collapseTarget={isAfter ? 'b' : 'a'}
           storageKey="panel-{panel.title ?? 'default'}.{head.id}"
+          initialCollapsed={head.collapsed === true}
           onCollapse={(isCollapsed) => handleAreaCollapse(head.id, isCollapsed)}
         >
           {#snippet a()}
