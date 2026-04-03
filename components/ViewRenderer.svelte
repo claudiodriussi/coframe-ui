@@ -1,7 +1,7 @@
 <script lang="ts">
   import PluginComponent from './PluginComponent.svelte';
   import DataView from './DataView.svelte';
-  import type { ViewDescriptor } from './DataView.svelte';
+  import type { ViewDescriptor } from './dataview.types';
   import { pluginLoader } from '$app-plugins/registry';
 
   interface Props {

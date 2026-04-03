@@ -26,7 +26,6 @@ import type { ColumnDef, SortDef, CellInfo, CoframeTableConfig } from './types';
 export type { ColumnDef, SortDef, CellInfo, CoframeTableConfig };
 
 export class CoframeTable {
-
   // config is a plain mutable object; event handlers close over `this.config`
   // so updating properties here (e.g. in updateColumns) is immediately visible
   // to all registered handlers without re-registering them.
@@ -44,9 +43,9 @@ export class CoframeTable {
   private _restoringsel = false;
 
   private constructor(table: any, container: HTMLElement, config: CoframeTableConfig) {
-    this.table    = table;
+    this.table = table;
     this._container = container;
-    this.config   = config;
+    this.config = config;
     this._keyHandler = this._handleKeyNav.bind(this);
     this._registerEvents();
     this._setupObserver();
@@ -79,16 +78,10 @@ export class CoframeTable {
    * state restore) is preserved: `{ _meta: {}, ...row }` lets row._meta win.
    */
   static injectMeta(data: any[]): any[] {
-    return data.map(row =>
-      row && typeof row === 'object' ? { _meta: {}, ...row } : row
-    );
+    return data.map((row) => (row && typeof row === 'object' ? { _meta: {}, ...row } : row));
   }
 
-  private static _buildCols(
-    columns: ColumnDef[],
-    selectable: boolean,
-    filterMode: boolean,
-  ): any[] {
+  private static _buildCols(columns: ColumnDef[], selectable: boolean, filterMode: boolean): any[] {
     const cols: any[] = [];
 
     if (selectable) {
@@ -101,10 +94,12 @@ export class CoframeTable {
         hozAlign: 'center',
         headerHozAlign: 'center',
         headerSort: false,
-        width: 44, minWidth: 44, maxWidth: 44,
+        width: 44,
+        minWidth: 44,
+        maxWidth: 44,
         frozen: true,
         cssClass: 'cf-col-select',
-        download: false,
+        download: false
       });
     }
 
@@ -114,20 +109,20 @@ export class CoframeTable {
         title: c.title ?? c.field,
         hozAlign: c.hozAlign ?? 'left',
         headerSort: c.headerSort !== false,
-        visible: c.visible !== false,
+        visible: c.visible !== false
       };
       if (filterMode) {
         col.headerFilter = 'input';
         col.headerFilterPlaceholder = ' ';
       }
-      if (c.width !== undefined)    col.width = c.width;
-      if (c.minWidth !== undefined)  col.minWidth = c.minWidth;
-      if (c.maxWidth !== undefined)  col.maxWidth = c.maxWidth;
-      if (c.frozen)                  col.frozen = true;
-      if (c.formatter)               col.formatter = c.formatter;
-      if (c.formatterParams)         col.formatterParams = c.formatterParams;
-      if (c.sorter)                  col.sorter = c.sorter;
-      if (c.cssClass)                col.cssClass = c.cssClass;
+      if (c.width !== undefined) col.width = c.width;
+      if (c.minWidth !== undefined) col.minWidth = c.minWidth;
+      if (c.maxWidth !== undefined) col.maxWidth = c.maxWidth;
+      if (c.frozen) col.frozen = true;
+      if (c.formatter) col.formatter = c.formatter;
+      if (c.formatterParams) col.formatterParams = c.formatterParams;
+      if (c.sorter) col.sorter = c.sorter;
+      if (c.cssClass) col.cssClass = c.cssClass;
       cols.push(col);
     }
 
@@ -157,13 +152,13 @@ export class CoframeTable {
         sorter: (a: any, b: any) => {
           if (typeof a === 'number' && typeof b === 'number') return a - b;
           return String(a ?? '').localeCompare(String(b ?? ''), undefined, { numeric: true });
-        },
+        }
       },
       selectableRows: true,
       resizableColumnFit: false,
       placeholder: 'No data to display',
       scrollToRowPosition: 'nearest',
-      scrollToRowIfVisible: false,
+      scrollToRowIfVisible: false
     };
 
     if (config.mode === 'page') {
@@ -173,7 +168,7 @@ export class CoframeTable {
       opts.paginationSizeSelector = [10, 20, 50, 100];
     }
 
-    if (config.rowHeight)  opts.rowHeight = config.rowHeight;
+    if (config.rowHeight) opts.rowHeight = config.rowHeight;
 
     if (config.treeMode) {
       opts.dataTree = true;
@@ -182,7 +177,7 @@ export class CoframeTable {
     }
 
     if (config.initialSort.length > 0) {
-      opts.initialSort = config.initialSort.map(s => ({ column: s.field, dir: s.dir }));
+      opts.initialSort = config.initialSort.map((s) => ({ column: s.field, dir: s.dir }));
     }
 
     return opts;
@@ -191,7 +186,7 @@ export class CoframeTable {
   // ── Event registration ─────────────────────────────────────────────────────
 
   private _registerEvents() {
-    const t   = this.table;
+    const t = this.table;
     const cfg = this.config; // mutable reference — always reflects latest config
 
     t.on('cellClick', (_e: MouseEvent, cell: any) => {
@@ -211,7 +206,10 @@ export class CoframeTable {
     // selectable=off: deselect immediately (no UI).
     // selectable=on: restore pre-click selection so only checkbox toggles affect it.
     t.on('rowClick', (e: MouseEvent, _row: any) => {
-      if (!cfg.selectable) { t.deselectRow(); return; }
+      if (!cfg.selectable) {
+        t.deselectRow();
+        return;
+      }
       if ((e.target as HTMLElement)?.closest('.cf-col-select')) return;
       this._restoringsel = true;
       t.deselectRow();
@@ -228,7 +226,7 @@ export class CoframeTable {
     });
 
     t.on('dataLoaded', (loadedData: any[]) => {
-      this._activeRow   = null;
+      this._activeRow = null;
       this._activeRowId = null;
       cfg.onDataLoaded?.(loadedData.length);
     });
@@ -252,7 +250,7 @@ export class CoframeTable {
       }
     });
 
-    // tableBuilt fires after all modules are initialised and the initial data
+    // tableBuilt fires after all modules are initialized and the initial data
     // load is complete. Safe to call addData / setHeaderFilterValue after this.
     t.on('tableBuilt', () => {
       this._tableReady = true;
@@ -271,11 +269,15 @@ export class CoframeTable {
 
   private _setActiveRow(row: any) {
     if (this._activeRow) {
-      try { this._activeRow.getElement().classList.remove('cf-row-active'); } catch (_) {}
+      try {
+        this._activeRow.getElement().classList.remove('cf-row-active');
+      } catch (_) {}
     }
-    this._activeRow   = row;
+    this._activeRow = row;
     this._activeRowId = row.getData()?.id ?? null;
-    try { row.getElement().classList.add('cf-row-active'); } catch (_) {}
+    try {
+      row.getElement().classList.add('cf-row-active');
+    } catch (_) {}
     this.config.onRowClick?.(row.getData());
   }
 
@@ -297,17 +299,21 @@ export class CoframeTable {
 
     if (!this._activeRow) {
       this._setActiveRow(displayRows[0]);
-      try { displayRows[0].scrollTo('top', false); } catch (_) {}
+      try {
+        displayRows[0].scrollTo('top', false);
+      } catch (_) {}
       return;
     }
 
     const currentIdx = displayRows.indexOf(this._activeRow);
-    const fromIdx    = currentIdx === -1 ? 0 : currentIdx;
-    const nextIdx    = e.key === 'ArrowDown' ? fromIdx + 1 : fromIdx - 1;
+    const fromIdx = currentIdx === -1 ? 0 : currentIdx;
+    const nextIdx = e.key === 'ArrowDown' ? fromIdx + 1 : fromIdx - 1;
     if (nextIdx >= 0 && nextIdx < displayRows.length) {
       this._setActiveRow(displayRows[nextIdx]);
       const pos = e.key === 'ArrowDown' ? 'bottom' : 'top';
-      try { displayRows[nextIdx].scrollTo(pos, false); } catch (_) {}
+      try {
+        displayRows[nextIdx].scrollTo(pos, false);
+      } catch (_) {}
     }
   }
 
@@ -315,7 +321,7 @@ export class CoframeTable {
 
   /** Update column definitions and rebuild Tabulator columns. */
   updateColumns(columns: ColumnDef[], selectable: boolean, filterMode: boolean) {
-    this.config.columns    = columns;
+    this.config.columns = columns;
     this.config.selectable = selectable;
     this.config.filterMode = filterMode;
     this.table?.setColumns(CoframeTable._buildCols(columns, selectable, filterMode));
@@ -337,15 +343,25 @@ export class CoframeTable {
 
   // ── Public API — selection / filters / sort ────────────────────────────────
 
-  clearSelection()         { this.table?.deselectRow(); }
-  clearHeaderFilter()      { this.table?.clearHeaderFilter(); }
-  clearSort()              { this.table?.clearSort(); }
-  getSelectedData(): any[] { return this.table?.getSelectedData() ?? []; }
-  redraw(force = false)    { if (this._tableReady) this.table?.redraw(force); }
+  clearSelection() {
+    this.table?.deselectRow();
+  }
+  clearHeaderFilter() {
+    this.table?.clearHeaderFilter();
+  }
+  clearSort() {
+    this.table?.clearSort();
+  }
+  getSelectedData(): any[] {
+    return this.table?.getSelectedData() ?? [];
+  }
+  redraw(force = false) {
+    if (this._tableReady) this.table?.redraw(force);
+  }
 
   download(format: 'csv' | 'json', filename: string, options?: any, range?: string) {
     if (range) this.table?.download(format, filename, options ?? {}, range);
-    else       this.table?.download(format, filename);
+    else this.table?.download(format, filename);
   }
 
   getHeaderFilters(): any[] {
@@ -362,7 +378,7 @@ export class CoframeTable {
 
   setSort(sorters: Array<{ field: string; dir: string }>) {
     if (!this.table || !sorters.length) return;
-    this.table.setSort(sorters.map(s => ({ column: s.field, dir: s.dir })));
+    this.table.setSort(sorters.map((s) => ({ column: s.field, dir: s.dir })));
   }
 
   /** Select rows matching the given id values; silently skips missing IDs. */

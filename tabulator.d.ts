@@ -1,5 +1,5 @@
-// Dichiarazione minimale per tabulator-tables (nessun @types disponibile).
-// Evita l'errore TS7016 senza perdere il type-checking sul resto del codice.
+// Minimal declaration for tabulator-tables (no @types available).
+// Avoids TS7016 error without losing type-checking on the rest of the code.
 declare module 'tabulator-tables' {
   export class Tabulator {
     constructor(element: HTMLElement | string, options?: Record<string, unknown>);
