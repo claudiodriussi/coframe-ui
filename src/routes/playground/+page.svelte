@@ -3,18 +3,18 @@
   // Aggiungere qui i link man mano che si creano nuove pagine.
 
   const pages: { href: string; label: string }[] = [
-    { href: '/playground/api',     label: 'API & Auth' },
+    { href: '/playground/api', label: 'API & Auth' },
     { href: '/playground/plugins', label: 'Plugin System' },
-    { href: '/playground/stack',   label: 'Stack Navigation' },
-    { href: '/playground/form',    label: 'Form (bits-ui)' },
+    { href: '/playground/stack', label: 'Stack Navigation' },
+    { href: '/playground/form', label: 'Form (bits-ui)' },
     { href: '/playground/dialogs', label: 'Dialogs (bits-ui)' },
-    { href: '/playground/split',   label: 'SplitPane' },
-    { href: '/playground/types',    label: 'Type Schema' },
+    { href: '/playground/split', label: 'SplitPane' },
+    { href: '/playground/types', label: 'Type Schema' },
     { href: '/playground/datatable', label: 'DataTable' },
-    { href: '/playground/triggers',   label: 'Trigger System' },
-    { href: '/playground/panels',    label: 'Panel Renderer' },
-    { href: '/playground/panels2',   label: 'Panel Multi-Split' },
-    { href: '/playground/panels3',   label: 'Panel Nested Splits' },
+    { href: '/playground/panels', label: 'Panel Renderer' },
+    { href: '/playground/panels2', label: 'Panel Multi-Split' },
+    { href: '/playground/panels3', label: 'Panel Nested Splits' },
+    { href: '/playground/triggers', label: 'Trigger System' }
   ];
 </script>
 

@@ -3,19 +3,20 @@
   import { goto } from '$app/navigation';
   import { authStore } from '$coframe/auth/store.svelte';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
+  import '$app-plugins/formatters';
 
   let { children } = $props();
 
   let ready = $state(false);
 
-  onMount(() => {
+  onMount(async () => {
     authStore.checkAuth();
     if (!authStore.isAuthenticated) {
       goto('/login');
     } else {
-      // Load server config + type schema once before any panel renders.
-      // No-op on subsequent mounts (singleton store, loaded flag).
-      serverConfig.load();
+      // Await server config so that reload_all_threshold and page_size are
+      // available before any DataView renders. No-op if already loaded.
+      await serverConfig.load();
       ready = true;
     }
   });

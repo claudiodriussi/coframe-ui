@@ -1,11 +1,15 @@
 /**
- * Project-specific plugin registry.
- * Maps plugin component IDs to dynamic imports from $plugins (backend plugin dir).
+ * Project-specific plugin component registry.
+ * Auto-discovers all Svelte components under $plugins.
+ *
+ * ID convention: plugin_name[/client]/Name.svelte → plugin_name.name
+ * e.g. library/client/Hello.svelte → library.hello
+ *      library/Hello.svelte        → library.hello
  *
  * $plugins → coframe/devtest/plugins/  (via svelte.config.js alias)
  */
-import { createPluginLoader } from '$coframe/plugins/loader';
+import { createPluginLoaderFromGlob } from '$coframe/plugins/loader';
 
-export const pluginLoader = createPluginLoader({
-  'library.hello': () => import('$plugins/libapp/library/client/HelloWorld.svelte'),
-});
+export const pluginLoader = createPluginLoaderFromGlob(
+  import.meta.glob('$plugins/**/*.svelte'),
+);

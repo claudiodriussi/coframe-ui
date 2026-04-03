@@ -1,7 +1,7 @@
 <script lang="ts">
   import DataTable from '$coframe/components/DataTable.svelte';
   import SplitPane from '$coframe/components/SplitPane.svelte';
-  import type { ColumnDef, CellInfo } from '$coframe/components/DataTable.svelte';
+  import type { ColumnDef, CellInfo } from '$coframe/tabulator/CoframeTable';
 
   // ── Dati di esempio ────────────────────────────────────────────────────────
 

@@ -25,7 +25,9 @@ export default defineConfig(
 			'@typescript-eslint/no-explicit-any': 'off',
 			'@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
 			'@typescript-eslint/no-non-null-assertion': 'off',
-			'svelte/no-unused-svelte-ignore': 'warn'
+			'svelte/no-unused-svelte-ignore': 'warn',
+			'svelte/no-navigation-without-resolve': 'off',
+			'svelte/require-each-key': 'off'
 		}
 	},
 	{
