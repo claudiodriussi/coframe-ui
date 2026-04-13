@@ -11,10 +11,11 @@
     { href: '/playground/split', label: 'SplitPane' },
     { href: '/playground/types', label: 'Type Schema' },
     { href: '/playground/datatable', label: 'DataTable' },
-    { href: '/playground/panels', label: 'Panel Renderer' },
-    { href: '/playground/panels2', label: 'Panel Multi-Split' },
-    { href: '/playground/panels3', label: 'Panel Nested Splits' },
-    { href: '/playground/triggers', label: 'Trigger System' }
+    { href: '/playground/pages', label: 'Page Renderer' },
+    { href: '/playground/pages2', label: 'Page Multi-Split' },
+    { href: '/playground/pages3', label: 'Page Nested Splits' },
+    { href: '/playground/triggers', label: 'Trigger System' },
+    { href: '/playground/tables',   label: 'Table Browser' }
   ];
 </script>
 

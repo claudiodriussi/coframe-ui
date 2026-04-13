@@ -4,7 +4,7 @@
 
   const PANELS = [
     { id: 'hello_demo', label: 'Hello Demo (plugin)' },
-    { id: 'panels.demo_author_list', label: 'Author List (table)' },
+    { id: 'demo_author_list', label: 'Author List (table)' },
     { id: 'demo_book_list', label: 'Book List + Publisher (join)' },
     { id: 'demo_book_authors', label: 'Books + Authors (M2M + group_by)' }
   ];
@@ -19,7 +19,7 @@
     error = null;
     loading = true;
     try {
-      const res = await api.endpoint('get_panel', { id });
+      const res = await api.endpoint('get_page', { id });
       if (res.status === 'success') {
         panel = res.data as Record<string, unknown>;
       } else {
@@ -48,7 +48,7 @@
 
   <!-- ── Controls ──────────────────────────────────────────────────────────── -->
   <div class="flex flex-shrink-0 flex-wrap items-center gap-3">
-    <h1 class="text-2xl font-semibold">Panel Renderer</h1>
+    <h1 class="text-2xl font-semibold">Page Renderer</h1>
 
     <select bind:value={selectedId} class="input w-auto py-1 text-sm">
       {#each PANELS as p}
@@ -57,7 +57,7 @@
     </select>
 
     <code class="rounded bg-gray-100 px-2 py-1 text-sm text-gray-600">
-      get_panel("{selectedId}")
+      get_page("{selectedId}")
     </code>
   </div>
 

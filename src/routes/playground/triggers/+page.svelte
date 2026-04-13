@@ -8,7 +8,7 @@
 
   async function loadPanel() {
     try {
-      const res = await api.endpoint('get_panel', { id: 'book_with_reviews' });
+      const res = await api.endpoint('get_page', { id: 'book_with_reviews' });
       if (res.status === 'success') {
         panel = res.data as Record<string, unknown>;
       } else {

@@ -27,7 +27,7 @@
     error = null;
     loading = true;
     try {
-      const res = await api.endpoint('get_panel', { id });
+      const res = await api.endpoint('get_page', { id });
       if (res.status === 'success') {
         panel = res.data as Record<string, unknown>;
       } else {
