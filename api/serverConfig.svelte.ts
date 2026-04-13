@@ -76,6 +76,28 @@ export interface TypeInfo {
 
 export type TypeRegistry = Record<string, TypeInfo>;
 
+// ── Table schema ─────────────────────────────────────────────────────────────
+
+export interface TableColumnInfo {
+  name: string;
+  type?: string;
+  label?: string;
+  virtual?: boolean;
+  editable?: boolean;
+  nullable?: boolean;
+  secret?: boolean;
+  [key: string]: unknown;
+}
+
+export interface TableInfo {
+  /** PK column name(s). Single element for normal tables, two for M2M composite PKs. */
+  pk_fields: string[];
+  columns: TableColumnInfo[];
+  mixins?: string[];
+}
+
+export type TableRegistry = Record<string, TableInfo>;
+
 // ── Server config shape ──────────────────────────────────────────────────────
 
 export interface DataviewConfig {
@@ -133,6 +155,7 @@ export function resolveWidget(typeName: string, registry: TypeRegistry): string 
 class ServerConfigStore {
   types       = $state<TypeRegistry>({});
   config      = $state<ServerConfigData>({});
+  tables      = $state<TableRegistry>({});
   loaded      = $state(false);
   loading     = $state(false);
   error       = $state<string | null>(null);
@@ -153,14 +176,15 @@ class ServerConfigStore {
     this.error   = null;
 
     try {
-      const res = await api.endpoint<{ config: ServerConfigData; types: TypeRegistry }>(
+      const res = await api.endpoint<{ config: ServerConfigData; types: TypeRegistry; tables: TableRegistry }>(
         'get_server_config',
         { include_builtin: includeBuiltin },
       );
 
       if (res.status === 'success' && res.data) {
-        this.config      = res.data.config ?? {};
-        this.types       = res.data.types  ?? {};
+        this.config      = res.data.config  ?? {};
+        this.types       = res.data.types   ?? {};
+        this.tables      = res.data.tables  ?? {};
         this.loaded      = true;
         this.withBuiltin = includeBuiltin;
       } else {
@@ -182,6 +206,7 @@ class ServerConfigStore {
   reset() {
     this.types   = {};
     this.config  = {};
+    this.tables  = {};
     this.loaded  = false;
     this.error   = null;
   }

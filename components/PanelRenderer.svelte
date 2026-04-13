@@ -2,7 +2,7 @@
   /**
    * PanelRenderer.svelte — panel layout: header + recursive SplitPane nesting
    *
-   * Renders a resolved panel descriptor (from get_panel) as:
+   * Renders a resolved page descriptor (from get_page) as:
    *   [optional header]  ← panel.title
    *   [content + splits] ← recursive SplitPane tree
    *

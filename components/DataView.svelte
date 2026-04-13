@@ -127,6 +127,12 @@
   const hasMore = $derived(
     view.type !== 'tree' && totalCount !== null && rowCount < totalCount,
   );
+
+  // PK field name — derived from serverConfig.tables using the view's source model.
+  // Falls back to 'id' if the table schema is not loaded yet or has no declared PK.
+  const pkField = $derived(
+    serverConfig.tables[view.source?.model ?? '']?.pk_fields?.[0] ?? 'id'
+  );
   const allowViews = $derived(view.allow_views ?? []);
   const toolbarItems = $derived(view.actions?.toolbar ?? []);
   const selectable = $derived(selectMode || view.policy?.selection === true);
@@ -144,7 +150,7 @@
       sorters: tableRef.getSorters(),
       rowCount,
       selectMode,
-      selectedIds: tableRef.getSelectedData().map((r: any) => r.id).filter((id: any) => id != null),
+      selectedIds: tableRef.getSelectedData().map((r: any) => r[pkField]).filter((id: any) => id != null),
     };
     try { localStorage.setItem(getStateKey(), JSON.stringify(state)); } catch (_) {}
   }
@@ -236,7 +242,7 @@
     const roots: Record<string, unknown>[] = [];
     for (const item of flat) {
       const row = { ...(item as Record<string, unknown>), [childField]: [] };
-      map.set(row.id, row);
+      map.set(row[pkField], row);
     }
     for (const row of map.values()) {
       const parentId = row[parentField];

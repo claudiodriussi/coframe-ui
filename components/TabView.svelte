@@ -5,7 +5,7 @@
    * All tabs mount immediately so switching is instant (no re-fetch).
    * trigger and collapsed are forwarded to every tab's ViewRenderer.
    *
-   * Descriptor shape (after $ref resolution by get_panel):
+   * Descriptor shape (after $ref resolution by get_page):
    *   type: tabs
    *   tabs:
    *     - id: reviews
