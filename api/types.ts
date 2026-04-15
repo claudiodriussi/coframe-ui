@@ -26,6 +26,10 @@ export interface APIResponse<T = unknown> {
   status: 'success' | 'error';
   data?: T;
   message?: string;
+  /** Exception class name from Python (e.g. "ValueError", "ScannerError") */
+  error_type?: string;
+  /** Full Python traceback — always present on server-side errors */
+  traceback?: string;
 }
 
 export interface AuthResponse {

@@ -141,10 +141,14 @@ class CoframeAPI {
         data
       );
       const d = res.data;
+      if (d?.status === 'success') {
+        return { status: 'success', data: d.data };
+      }
       return {
-        status: d?.status === 'success' ? 'success' : 'error',
-        data: d?.data,
-        message: d?.message
+        status: 'error',
+        message: d?.message,
+        error_type: d?.error_type,
+        traceback: d?.traceback,
       };
     } catch (err: any) {
       return { status: 'error', message: err.response?.data?.message ?? 'Request failed' };

@@ -1,8 +1,10 @@
 <script lang="ts">
   import PluginComponent from './PluginComponent.svelte';
   import DataView from './DataView.svelte';
+  import DataForm from './DataForm.svelte';
   import TabView from './TabView.svelte';
   import type { ViewDescriptor } from './dataview.types';
+  import type { FormDescriptor } from './dataform.types';
   import { pluginLoader } from '$app-plugins/registry';
 
   interface Props {
@@ -15,7 +17,14 @@
   let { view, trigger, collapsed, onEvent }: Props = $props();
 </script>
 
-{#if view.type === 'plugin'}
+{#if view.type === 'form'}
+  <DataForm
+    view={view as unknown as FormDescriptor}
+    trigger={trigger}
+    onEvent={onEvent}
+  />
+
+{:else if view.type === 'plugin'}
   <PluginComponent
     loader={pluginLoader}
     componentId={view.component as string}
