@@ -1,7 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
+  import { setPluginLoader } from '$coframe/plugins/context';
+  import { pluginLoader } from '$app-plugins/registry';
   import '$app-plugins/formatters';
+
+  setPluginLoader(pluginLoader);
 
   let { children } = $props();
   let ready = $state(false);

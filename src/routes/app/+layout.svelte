@@ -3,7 +3,12 @@
   import { goto } from '$app/navigation';
   import { authStore } from '$coframe/auth/store.svelte';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
+  import MessageBox from '$coframe/components/MessageBox.svelte';
+  import { setPluginLoader } from '$coframe/plugins/context';
+  import { pluginLoader } from '$app-plugins/registry';
   import '$app-plugins/formatters';
+
+  setPluginLoader(pluginLoader);
 
   let { children } = $props();
 
@@ -21,6 +26,8 @@
     }
   });
 </script>
+
+<MessageBox />
 
 {#if ready}
   <div class="flex min-h-screen">

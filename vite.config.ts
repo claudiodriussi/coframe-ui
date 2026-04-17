@@ -13,6 +13,9 @@ export default defineConfig(({ mode }) => {
 
     server: {
       port,
+      fs: {
+        allow: ['..']
+      },
       // In dev: proxy API calls to the backend server.
       // In prod: same-origin (FastAPI serves everything), no proxy needed.
       proxy: {

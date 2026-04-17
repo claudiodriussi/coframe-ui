@@ -6,16 +6,12 @@ import coframe from './coframe.config.js';
 const config = {
   kit: {
     adapter: adapter({
-      fallback: 'index.html'   // SPA mode: tutte le route sconosciute → index.html
+      fallback: 'index.html'   // SPA mode: unknown routes → index.html
     }),
     alias: {
-      // Backend plugin components - same dir as server plugins.
-      // Path configured in coframe.config.js.
-      $plugins: coframe.pluginsDir,
-      // Coframe library - separate git repo (src/lib/coframe).
-      $coframe: resolve('src/lib/coframe'),
-      // Project-level app code (outside $lib, e.g. plugin registry).
-      '$app-plugins': resolve('src/app-plugins')
+      $plugins: coframe.pluginsDir,           // backend plugin components (path from coframe.config.js)
+      $coframe: resolve('src/coframe-ui'),    // coframe-ui library (separate git repo)
+      '$app-plugins': resolve('src/app-plugins') // app-specific plugin registry and formatters
     }
   }
 };

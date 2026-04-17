@@ -266,7 +266,7 @@
         {/if}
       </div>
 
-      <!-- Priorità -->
+      <!-- Priority -->
       <div>
         <label for="priorita" class="mb-1 block text-sm font-medium text-gray-700">Priorità</label>
         <select id="priorita" class="input" bind:value={form.priorita}>
