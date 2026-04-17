@@ -5,7 +5,8 @@
   import TabView from './TabView.svelte';
   import type { ViewDescriptor } from './dataview.types';
   import type { FormDescriptor } from './dataform.types';
-  import { pluginLoader } from '$app-plugins/registry';
+  import { getPluginLoader } from '$coframe/plugins/context';
+  const pluginLoader = getPluginLoader();
 
   interface Props {
     view: Record<string, unknown>;

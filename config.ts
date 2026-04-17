@@ -1,24 +1,36 @@
-/**
- * Runtime configuration - reads VITE_* environment variables.
- * Values are set in .env.development / .env.production.
- * See .env.example for documentation of available variables.
- */
+interface CoframeApiConfig {
+  baseUrl: string;
+  prefix: string;
+  endpointPrefix: string;
+}
 
-const apiBase           = import.meta.env.VITE_API_BASE_URL       ?? '';
-const apiPrefix         = import.meta.env.VITE_API_PREFIX         ?? 'coframe';
-const apiEndpointPrefix = import.meta.env.VITE_API_ENDPOINT_PREFIX ?? 'endpoint';
+interface CoframeConfig {
+  api: CoframeApiConfig;
+}
 
-export const config = {
+let _config: CoframeConfig = {
   api: {
-    // Base URL of the backend (empty = same origin in production)
-    baseUrl: apiBase,
-    // Route prefix matching backend config.yaml → api.prefix
-    prefix: apiPrefix,
-    // Endpoint dispatcher prefix matching backend config.yaml → api.endpoint_prefix
-    endpointPrefix: apiEndpointPrefix,
-    // Full API root: used by the axios client
-    get root(): string {
-      return apiBase ? `${apiBase}/${apiPrefix}` : `/${apiPrefix}`;
-    }
+    baseUrl:        import.meta.env.VITE_API_BASE_URL        ?? '',
+    prefix:         import.meta.env.VITE_API_PREFIX          ?? 'coframe',
+    endpointPrefix: import.meta.env.VITE_API_ENDPOINT_PREFIX ?? 'endpoint',
   }
-} as const;
+};
+
+export const initCoframe = (cfg: { api?: Partial<CoframeApiConfig> }) => {
+  if (cfg.api) _config = { ..._config, api: { ..._config.api, ...cfg.api } };
+};
+
+export const getConfig = (): CoframeConfig => _config;
+
+// Backwards-compatible accessor for internal lib use
+export const config = {
+  get api() {
+    return {
+      ..._config.api,
+      get root(): string {
+        const { baseUrl, prefix } = _config.api;
+        return baseUrl ? `${baseUrl}/${prefix}` : `/${prefix}`;
+      }
+    };
+  }
+};
