@@ -3,19 +3,23 @@
   import { stack } from './stack.svelte';
   import { fly } from 'svelte/transition';
 
-  /**
-   * Intercepts browser Back (type === 'popstate').
-   * - stack > 1 pages: cancels navigation and pops.
-   *   SvelteKit calls history.go(+1) internally, so the next Back
-   *   triggers it again.
-   * - stack = 1 (base page): lets through → SvelteKit navigates away.
-   *   A single Back click is enough to exit, no fake history entries.
-   */
+  interface Props {
+    onExit?: () => void;
+  }
+
+  let { onExit }: Props = $props();
+
+  // Pop on browser Back whenever the stack has pages; let SvelteKit navigate when empty.
   beforeNavigate(({ type, cancel }) => {
-    if (type === 'popstate' && stack.length > 1) {
+    if (type === 'popstate' && stack.length > 0) {
       cancel();
       stack.pop();
     }
+  });
+
+  // Fire onExit when the stack empties.
+  $effect(() => {
+    if ($stack.length === 0) onExit?.();
   });
 </script>
 

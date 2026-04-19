@@ -33,7 +33,7 @@ export class CoframeTable {
 
   private table: any;
   private _container: HTMLElement;
-  private _tableReady = false;
+  _tableReady = false;
   private _activeRow: any = null;
   private _activeRowId: unknown = null;
   private _observer: ResizeObserver | null = null;
@@ -67,7 +67,13 @@ export class CoframeTable {
     // after the dynamic import, causing Tabulator to set tableholder height to 0.
     void element.offsetHeight;
     const table = new TabulatorFull(element, CoframeTable._buildOptions(config));
-    return new CoframeTable(table, element, config);
+    const ct = new CoframeTable(table, element, config);
+    // Tabulator defers _create() via setTimeout, so headersElement is null until
+    // tableBuilt fires. Wait here so callers always receive a fully ready instance.
+    if (!ct._tableReady) {
+      await new Promise<void>((resolve) => table.on('tableBuilt', resolve));
+    }
+    return ct;
   }
 
   // ── Column building ────────────────────────────────────────────────────────
@@ -200,6 +206,10 @@ export class CoframeTable {
     // Capture selection before a row click replaces it (Tabulator auto-selects on click).
     t.on('rowMouseDown', (_e: MouseEvent, _row: any) => {
       if (cfg.selectable) this._savedSel = t.getSelectedData();
+    });
+
+    t.on('rowDblClick', (_e: MouseEvent, row: any) => {
+      this.config.onRowDblClick?.(row.getData());
     });
 
     // rowClick fires after Tabulator single-selected the row.

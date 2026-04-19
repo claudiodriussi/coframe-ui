@@ -31,6 +31,7 @@
     treeStartExpanded = false,
     filterMode = false,
     onRowClick = undefined as ((row: any) => void) | undefined,
+    onRowDblClick = undefined as ((row: any) => void) | undefined,
     onCellClick = undefined as ((cell: CellInfo) => void) | undefined,
     onSelectionChange = undefined as ((rows: any[]) => void) | undefined,
     onDataLoaded = undefined as ((count: number) => void) | undefined,
@@ -50,6 +51,7 @@
     treeChildField?: string;
     treeStartExpanded?: boolean;
     onRowClick?: (row: any) => void;
+    onRowDblClick?: (row: any) => void;
     onCellClick?: (cell: CellInfo) => void;
     onSelectionChange?: (rows: any[]) => void;
     onDataLoaded?: (count: number) => void;
@@ -69,7 +71,7 @@
     cfTable = await CoframeTable.create(container, {
       data, columns, selectable, filterMode, mode, pageSize, rowHeight: rowHeight,
       initialSort, treeMode, treeChildField, treeStartExpanded,
-      onRowClick, onCellClick, onSelectionChange, onDataLoaded, onFiltered, onSorted, onReady,
+      onRowClick, onRowDblClick, onCellClick, onSelectionChange, onDataLoaded, onFiltered, onSorted, onReady,
     });
     // Re-apply columns in case they changed while create() was awaiting
     // (e.g. inferred alignments/formatters set by DataView after first data load).

@@ -1,23 +1,27 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { DatePicker } from 'bits-ui';
-  import { parseDate, type DateValue } from '@internationalized/date';
+  import { parseDate, parseDateTime, type DateValue } from '@internationalized/date';
   import type { FormField } from '../dataform.types';
 
+  type Granularity = 'day' | 'hour' | 'minute' | 'second';
+
   interface Props {
-    value: unknown;       // ISO date string (e.g. "2024-03-15") or null
+    value: unknown;       // ISO date string (e.g. "2024-03-15") or ISO datetime or null
     onchange: (v: string | null) => void;
     onblur?: () => void;
     readonly?: boolean;
+    granularity?: Granularity;
     field: FormField;
   }
 
-  let { value, onchange, onblur, readonly = false, field }: Props = $props();
+  let { value, onchange, onblur, readonly = false, granularity = 'day', field }: Props = $props();
 
-  // Parse incoming ISO string to DateValue for bits-ui
   function toDateValue(v: unknown): DateValue | undefined {
     if (!v || typeof v !== 'string') return undefined;
-    try { return parseDate(v); } catch { return undefined; }
+    try {
+      return granularity === 'day' ? parseDate(v.slice(0, 10)) : parseDateTime(v.slice(0, 19));
+    } catch { return undefined; }
   }
 
   let dateValue = $state<DateValue | undefined>(untrack(() => toDateValue(value)));
@@ -41,9 +45,11 @@
   // Display helpers
   let displayValue = $derived(
     dateValue
-      ? new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(
-          new Date(dateValue.toString() + 'T00:00:00')
-        )
+      ? new Intl.DateTimeFormat('it-IT', granularity === 'day'
+          ? { day: '2-digit', month: '2-digit', year: 'numeric' }
+          : { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+              ...(granularity === 'second' ? { second: '2-digit' } : {}) }
+        ).format(new Date(granularity === 'day' ? dateValue.toString() + 'T00:00:00' : dateValue.toString()))
       : '—'
   );
 
@@ -68,7 +74,7 @@
   <DatePicker.Root
     value={dateValue}
     onValueChange={handleValueChange}
-    granularity="day"
+    {granularity}
     locale="it"
   >
     <div class="relative">

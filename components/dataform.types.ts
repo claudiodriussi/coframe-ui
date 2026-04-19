@@ -80,6 +80,9 @@ export interface FormActions {
 
 export interface FormPolicy {
   editable?: boolean;
+  toolbar_position?: 'top' | 'bottom';
+  button_align?: 'left' | 'right';
+  button_style?: 'label' | 'icon' | 'icon-label';
 }
 
 // ── Top-level descriptor ────────────────────────────────────────────────────

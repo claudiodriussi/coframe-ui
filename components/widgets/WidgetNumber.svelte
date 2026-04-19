@@ -41,7 +41,7 @@
     class="input {field.error ? 'input-error' : ''} {readonly ? 'read-only:bg-gray-50 read-only:cursor-default read-only:text-gray-600' : ''}
            {prefix ? 'pl-8' : ''} {suffix ? 'pr-8' : ''}"
     value={state.current}
-    oninput={(e) => (state.current = (e.target as HTMLInputElement).value)}
+    oninput={(e) => { state.current = (e.target as HTMLInputElement).value; const n = parseFloat(state.current); if (state.current === '' || !isNaN(n)) onchange(state.current === '' ? null : n); }}
     onblur={handleBlur}
     onkeydown={dispatchEnter}
     {readonly}

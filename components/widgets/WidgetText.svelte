@@ -7,10 +7,11 @@
     onchange: (v: string | null) => void;
     onblur?: () => void;
     readonly?: boolean;
+    type?: string;
     field: FormField;
   }
 
-  let { value, onchange, onblur, readonly = false, field }: Props = $props();
+  let { value, onchange, onblur, readonly = false, type = 'text', field }: Props = $props();
 
   const state = syncStringState(() => value);
 
@@ -21,10 +22,10 @@
 </script>
 
 <input
-  type="text"
+  type={type}
   class="input {field.error ? 'input-error' : ''} {readonly ? 'read-only:bg-gray-50 read-only:cursor-default read-only:text-gray-600' : ''}"
   value={state.current}
-  oninput={(e) => (state.current = (e.target as HTMLInputElement).value)}
+  oninput={(e) => { state.current = (e.target as HTMLInputElement).value; onchange(state.current === '' ? null : state.current); }}
   onblur={handleBlur}
   onkeydown={dispatchEnter}
   {readonly}

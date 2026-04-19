@@ -24,7 +24,7 @@
   class="input resize-y {field.error ? 'input-error' : ''} {readonly ? 'read-only:bg-gray-50 read-only:cursor-default read-only:text-gray-600' : ''}"
   rows={field.rows as number | undefined ?? 3}
   value={state.current}
-  oninput={(e) => (state.current = (e.target as HTMLTextAreaElement).value)}
+  oninput={(e) => { state.current = (e.target as HTMLTextAreaElement).value; onchange(state.current === '' ? null : state.current); }}
   onblur={handleBlur}
   {readonly}
   placeholder={field.placeholder as string | undefined}

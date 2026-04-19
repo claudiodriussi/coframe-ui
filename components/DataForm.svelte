@@ -18,6 +18,9 @@
    */
   import { onMount, untrack } from 'svelte';
   import type { Snippet } from 'svelte';
+  import { Check, X, Loader } from 'lucide-svelte';
+  import { getConfig } from '../config';
+  import { api } from '../api/client';
   import WidgetText from './widgets/WidgetText.svelte';
   import WidgetTextarea from './widgets/WidgetTextarea.svelte';
   import WidgetNumber from './widgets/WidgetNumber.svelte';
@@ -30,7 +33,8 @@
 
   interface Props {
     view: FormDescriptor;
-    data?: Record<string, unknown>;
+    data?: Record<string, unknown>;        // Step A: local data
+    recordId?: number | string | null;     // Step C: DB record id (null = new record)
     trigger?: Record<string, unknown>;
     status?: FormStatus;
     toolbarExtra?: Snippet;
@@ -39,16 +43,54 @@
     onCancel?: () => void;
   }
 
-  let { view, data = {}, trigger, status, toolbarExtra, onEvent, onSave, onCancel }: Props = $props();
+  let {
+    view,
+    data = {},
+    recordId,
+    trigger,
+    status,
+    toolbarExtra,
+    onEvent,
+    onSave,
+    onCancel
+  }: Props = $props();
+
+  // ── Mode detection (static — source config fixed at mount) ─────────────────
+  // untrack: intentional — view.source is fixed at mount, not reactive.
+
+  const isModelMode    = untrack(() => !!view.source?.model);
+  const isEndpointMode = untrack(() => !isModelMode && !!view.source?.endpoint);
+  const isAsyncMode    = isModelMode || isEndpointMode;
+
+  // Does the form need to wait for a trigger before loading?
+  const hasTriggerDeps = untrack(() => {
+    if (isEndpointMode) {
+      return Object.values(view.source?.pass ?? {}).some(
+        (v) => typeof v === 'string' && (v as string).startsWith('$trigger.')
+      );
+    }
+    // Model mode: trigger-driven if source.id references $trigger.*
+    if (isModelMode) {
+      const sid = view.source?.id;
+      return typeof sid === 'string' && sid.startsWith('$trigger.');
+    }
+    return false;
+  });
 
   // ── Internal state ─────────────────────────────────────────────────────────
 
-  // untrack: intentional — we capture data only at mount time (mode 4 local binding).
-  // Parent remounts the form (via key=) to reset with new data.
-  let original = $state<Record<string, unknown>>(untrack(() => ({ ...data })));
-  let draft = $state<Record<string, unknown>>(untrack(() => ({ ...data })));
+  // Local mode (Step A): capture data at mount via untrack.
+  // Async modes (B/C): start empty — loadData() fills original/draft.
+  let original = $state<Record<string, unknown>>(
+    isAsyncMode ? {} : untrack(() => ({ ...data }))
+  );
+  let draft = $state<Record<string, unknown>>(
+    isAsyncMode ? {} : untrack(() => ({ ...data }))
+  );
   let errors = $state<Record<string, string>>({});
   let saving = $state(false);
+  let loading = $state(false);
+  let internalStatus = $state<FormStatus | undefined>(undefined);
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -56,9 +98,7 @@
   let isEditable = $derived(policy.editable === true);
 
   // Flat fields only (group: are Phase 2 — filtered out here)
-  let flatFields = $derived(
-    (view.fields ?? []).filter((f): f is FormField => 'name' in f)
-  );
+  let flatFields = $derived((view.fields ?? []).filter((f): f is FormField => 'name' in f));
 
   // Group fields by same_row: a field with same_row:true joins the previous group.
   let fieldGroups = $derived(groupFields(flatFields));
@@ -66,8 +106,11 @@
   // dirty: JSON comparison — $state proxy reads all props correctly
   let dirty = $derived(JSON.stringify(draft) !== JSON.stringify(original));
 
-  // Show toolbar when editable or when there's external status/extra content
-  let showToolbar = $derived(isEditable || !!status || !!toolbarExtra);
+  // Trigger not yet arrived for a trigger-dependent async form
+  let waitingForTrigger = $derived(isAsyncMode && hasTriggerDeps && trigger === undefined);
+
+  // Show toolbar when editable or when there's any status/extra content
+  let showToolbar = $derived(isEditable || !!status || !!internalStatus || !!toolbarExtra);
 
   // ── Field grouping ─────────────────────────────────────────────────────────
 
@@ -98,7 +141,8 @@
     const t = (field.type ?? '').toLowerCase();
     if (t === 'bool' || t === 'boolean') return 'boolean';
     if (t === 'date') return 'date';
-    if (t === 'datetime') return 'date';
+    if (t === 'datetime') return 'datetime';
+    if (t === 'time') return 'time';
     if (t === 'longstr' || t === 'text') return 'textarea';
     if (t === 'int' || t === 'float' || t === 'decimal' || t === 'number') return 'number';
     if (field.choices && field.choices.length > 0) return 'combobox';
@@ -142,6 +186,74 @@
     return valid;
   }
 
+  // ── Async load/save (Step B: endpoint, Step C: model) ─────────────────────
+
+  function resolvePass(pass: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(pass).map(([k, v]) => {
+        if (typeof v === 'string' && v.startsWith('$trigger.')) {
+          return [k, trigger?.[v.slice('$trigger.'.length)]];
+        }
+        return [k, v];
+      })
+    );
+  }
+
+  // Resolve the record ID for Step C (prop, trigger, or descriptor literal)
+  function resolveRecordId(): number | string | null | undefined {
+    if (recordId !== undefined) return recordId; // explicit prop wins
+    const sid = view.source?.id;
+    if (typeof sid === 'string' && sid.startsWith('$trigger.')) {
+      return trigger?.[sid.slice('$trigger.'.length)] as number | string | undefined;
+    }
+    return sid as number | string | null | undefined;
+  }
+
+  async function loadData() {
+    const src = view.source;
+    loading = true;
+    internalStatus = undefined;
+    try {
+      let res;
+      if (isModelMode) {
+        const id = resolveRecordId();
+        if (id === null || id === undefined) {
+          // Create mode: initialize with defaults, no load
+          const defaults = (src?.defaults ?? {}) as Record<string, unknown>;
+          original = { ...defaults };
+          draft = { ...defaults };
+          errors = {};
+          onEvent?.('form_new', { ...defaults });
+          return;
+        }
+        res = await api.endpoint('db', { table: src!.model, method: 'get', id });
+      } else {
+        // Step B: endpoint-driven
+        res = await api.endpoint(src!.endpoint!, resolvePass(src?.pass ?? {}));
+      }
+      if (res.status === 'success') {
+        original = { ...(res.data as Record<string, unknown>) };
+        draft = { ...original };
+        errors = {};
+        onEvent?.('form_load', { ...original });
+      } else {
+        internalStatus = { message: res.message ?? 'Errore nel caricamento', type: 'error' };
+      }
+    } finally {
+      loading = false;
+    }
+  }
+
+  // Reload when trigger or recordId changes (track all unconditionally)
+  $effect(() => {
+    const _trigger = trigger;   // track incondizionale
+    const _rid = recordId;      // track incondizionale
+    void _rid;
+    if (!isAsyncMode) return;
+    if (hasTriggerDeps && _trigger === undefined) return;
+    loadData();
+  });
+
   // ── Save / Cancel ──────────────────────────────────────────────────────────
 
   async function handleSave() {
@@ -150,10 +262,57 @@
       return;
     }
     saving = true;
+    internalStatus = undefined;
     try {
-      await onSave?.({ ...draft });
-      original = { ...draft };
-      onEvent?.('form_save', { ...draft });
+      const src = view.source;
+      let res;
+
+      if (isModelMode) {
+        // Step C: DB CRUD via standard endpoint — only send declared form fields
+        const fieldNames = new Set(flatFields.map(f => f.name));
+        const payload = Object.fromEntries(Object.entries(draft).filter(([k]) => fieldNames.has(k)));
+        const id = resolveRecordId();
+        if (id === null || id === undefined) {
+          res = await api.endpoint('db', { table: src!.model, method: 'create', data: payload });
+        } else {
+          res = await api.endpoint('db', { table: src!.model, method: 'update', id, data: payload });
+        }
+      } else if (src?.save_endpoint) {
+        // Step B: custom save endpoint
+        res = await api.endpoint(src.save_endpoint, {
+          ...resolvePass(src.pass ?? {}),
+          data: { ...draft },
+        });
+      } else {
+        // Step A: local callback, no backend
+        await onSave?.({ ...draft });
+        original = { ...draft };
+        onEvent?.('form_save', { ...draft });
+        return;
+      }
+
+      if (res.status !== 'success') {
+        const errData = res.data as Record<string, unknown> | undefined;
+        if (errData?.errors) {
+          errors = errData.errors as Record<string, string>;
+          focusFirstError();
+        } else {
+          internalStatus = { message: res.message ?? 'Errore nel salvataggio', type: 'error' };
+        }
+        return;
+      }
+
+      // Merge saved data back if returned (e.g. server-assigned fields)
+      if (res.data && typeof res.data === 'object') {
+        original = { ...draft, ...(res.data as Record<string, unknown>) };
+        draft = { ...original };
+      } else {
+        original = { ...draft };
+      }
+      internalStatus = { message: 'Salvato', type: 'success' };
+      setTimeout(() => { if (internalStatus?.type === 'success') internalStatus = undefined; }, 3000);
+      onEvent?.('form_save', { ...original });
+      await onSave?.({ ...original });
     } finally {
       saving = false;
     }
@@ -184,7 +343,11 @@
   function handleFieldAreaKeydown(e: KeyboardEvent) {
     if (e.key !== 'Enter') return;
     const target = e.target as HTMLElement;
-    if (target instanceof HTMLInputElement && target.type !== 'submit' && target.type !== 'button') {
+    if (
+      target instanceof HTMLInputElement &&
+      target.type !== 'submit' &&
+      target.type !== 'button'
+    ) {
       e.preventDefault();
       advanceFocus(target);
     }
@@ -195,7 +358,7 @@
     const focusables = Array.from(
       fieldAreaEl.querySelectorAll<HTMLElement>(
         'input:not([disabled]):not([readonly]):not([type="hidden"]), ' +
-        'textarea:not([disabled]):not([readonly])'
+          'textarea:not([disabled]):not([readonly])'
       )
     );
     const idx = focusables.indexOf(from);
@@ -234,23 +397,33 @@
     }
   });
 
+  // ── Toolbar layout (policy overrides global defaults) ─────────────────────
+
+  const formCfg = getConfig().form;
+  let toolbarPosition = $derived(policy.toolbar_position ?? formCfg.toolbar_position);
+  let buttonAlign = $derived(policy.button_align ?? formCfg.button_align);
+  let buttonStyle = $derived(policy.button_style ?? formCfg.button_style);
+
   // ── Toolbar ────────────────────────────────────────────────────────────────
 
   let toolbarActions = $derived(
     (() => {
       const items = view.actions?.toolbar ?? (isEditable ? ['save', 'cancel'] : []);
-      return items.map((item) =>
-        typeof item === 'string' ? { id: item } : item
-      );
+      return items.map((item) => (typeof item === 'string' ? { id: item } : item));
     })()
   );
 
   const STATUS_ICON: Record<string, string> = {
-    info: 'ℹ', warning: '⚠', error: '✕', success: '✓',
+    info: 'ℹ',
+    warning: '⚠',
+    error: '✕',
+    success: '✓'
   };
   const STATUS_COLOR: Record<string, string> = {
-    info: 'text-blue-600', warning: 'text-amber-600',
-    error: 'text-danger', success: 'text-green-600',
+    info: 'text-blue-600',
+    warning: 'text-amber-600',
+    error: 'text-danger',
+    success: 'text-green-600'
   };
 </script>
 
@@ -262,96 +435,146 @@
   role="region"
   aria-label={view.title ?? 'Form'}
 >
-  <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
-  {#if showToolbar}
-    <div class="flex flex-shrink-0 items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2">
-
-      <!-- Action buttons (only when editable) -->
-      {#if isEditable}
-        {#each toolbarActions as action (action.id)}
-          {#if action.id === 'save'}
-            <button
-              class="btn btn-primary py-1.5 text-xs"
-              disabled={!dirty || saving}
-              onclick={handleSave}
-              title="Salva (F12 o Ctrl+Enter)"
-            >
-              {saving ? 'Salvataggio…' : (action.label ?? 'Salva')}
-            </button>
-
-          {:else if action.id === 'cancel'}
-            <button
-              class="btn btn-secondary py-1.5 text-xs"
-              disabled={saving}
-              onclick={handleCancel}
-              title="Annulla (Esc)"
-            >
-              {action.label ?? 'Annulla'}
-            </button>
-
-          {:else if action.id === 'separator'}
-            <span class="mx-1 h-5 border-l border-gray-200"></span>
-
-          {:else}
-            <!-- Custom action — extended in Step B/C -->
-            <button class="btn btn-secondary py-1.5 text-xs" disabled>
-              {action.label ?? action.id}
-            </button>
-          {/if}
-        {/each}
-      {/if}
-
-      <!-- Right side: status | toolbarExtra | dirty indicator -->
-      <div class="ml-auto flex items-center gap-3">
-        {#if status}
-          <span class="flex items-center gap-1 text-xs {STATUS_COLOR[status.type ?? 'info']}">
-            <span aria-hidden="true">{STATUS_ICON[status.type ?? 'info']}</span>
-            {status.message}
-          </span>
-        {:else if dirty && isEditable}
-          <span class="text-xs text-gray-400">Modifiche non salvate</span>
-        {/if}
-
-        {#if toolbarExtra}
-          {@render toolbarExtra()}
-        {/if}
-      </div>
-
-    </div>
+  {#if showToolbar && toolbarPosition === 'top'}
+    {@render toolbar('bottom')}
   {/if}
 
   <!-- ── Field area ──────────────────────────────────────────────────────── -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     bind:this={fieldAreaEl}
-    class="flex-1 min-h-0 overflow-y-auto p-4"
+    class="relative min-h-0 flex-1 overflow-y-auto p-4"
     onkeydown={handleFieldAreaKeydown}
     role="form"
   >
-    {#if fieldGroups.length === 0}
-      <p class="text-sm text-gray-400">Nessun campo configurato.</p>
+    {#if waitingForTrigger}
+      <!-- Placeholder: trigger not yet arrived -->
+      <div class="flex h-full items-center justify-center">
+        <p style="color: var(--cf-text-subtle)" class="text-sm">
+          Seleziona un elemento per visualizzare il dettaglio.
+        </p>
+      </div>
+
+    {:else if loading}
+      <!-- Loading overlay -->
+      <div class="flex h-full items-center justify-center gap-2"
+           style="color: var(--cf-text-subtle)">
+        <Loader size={16} class="animate-spin" />
+        <span class="text-sm">Caricamento…</span>
+      </div>
+
+    {:else}
+      {#if fieldGroups.length === 0}
+        <p class="text-sm" style="color: var(--cf-text-subtle)">
+          Nessun campo configurato.
+        </p>
+      {/if}
+
+      {#each fieldGroups as group (group[0].name)}
+        {#if group.length === 1}
+          <div class="mb-4" data-field={group[0].name}>
+            {@render fieldContent(group[0])}
+          </div>
+        {:else}
+          <div class="mb-4 flex gap-4">
+            {#each group as field (field.name)}
+              <div style={fieldWidthStyle(field)} data-field={field.name}>
+                {@render fieldContent(field)}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/each}
     {/if}
+  </div>
 
-    {#each fieldGroups as group (group[0].name)}
-      {#if group.length === 1}
-        <!-- ── Single field ── -->
-        <div class="mb-4" data-field={group[0].name}>
-          {@render fieldContent(group[0])}
-        </div>
+  {#if showToolbar && toolbarPosition === 'bottom'}
+    {@render toolbar('top')}
+  {/if}
+</div>
 
+<!-- ── Toolbar snippet ───────────────────────────────────────────────────── -->
+{#snippet toolbar(borderSide: 'top' | 'bottom')}
+  <div
+    class="flex flex-shrink-0 items-center gap-2 bg-gray-50 px-4 py-2
+    {borderSide === 'top' ? 'border-t' : 'border-b'} border-gray-200"
+  >
+    {#if buttonAlign === 'right'}
+      <!-- Status on LEFT (flex-1 absorbs space), buttons pinned RIGHT -->
+      <div class="flex flex-1 items-center gap-2">
+        {@render statusArea()}
+        {#if toolbarExtra}{@render toolbarExtra()}{/if}
+      </div>
+      <div class="flex items-center gap-2">
+        {@render actionButtons()}
+      </div>
+    {:else}
+      <!-- Buttons on LEFT, status on RIGHT (flex-1 absorbs space) -->
+      {@render actionButtons()}
+      <div class="flex flex-1 items-center justify-end gap-3">
+        {@render statusArea()}
+        {#if toolbarExtra}{@render toolbarExtra()}{/if}
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+<!-- ── Action buttons snippet ───────────────────────────────────────────── -->
+{#snippet actionButtons()}
+  {#if isEditable}
+    {#each toolbarActions as action (action.id)}
+      {#if action.id === 'save'}
+        <button
+          class="btn btn-primary py-1.5 text-xs"
+          disabled={!dirty || saving}
+          onclick={handleSave}
+          title="Conferma (F12 o Ctrl+Enter)"
+        >
+          {#if buttonStyle === 'icon' || buttonStyle === 'icon-label'}
+            <Check size={14} />
+          {/if}
+          {#if buttonStyle !== 'icon'}
+            {saving ? 'Salvataggio…' : (action.label ?? 'Conferma')}
+          {/if}
+        </button>
+      {:else if action.id === 'cancel'}
+        <button
+          class="btn btn-secondary py-1.5 text-xs"
+          disabled={saving}
+          onclick={handleCancel}
+          title="Annulla (Esc)"
+        >
+          {#if buttonStyle === 'icon' || buttonStyle === 'icon-label'}
+            <X size={14} />
+          {/if}
+          {#if buttonStyle !== 'icon'}
+            {action.label ?? 'Annulla'}
+          {/if}
+        </button>
+      {:else if action.id === 'separator'}
+        <span class="mx-1 h-5 border-l border-gray-200"></span>
       {:else}
-        <!-- ── Row of fields (same_row) ── -->
-        <div class="mb-4 flex gap-4">
-          {#each group as field (field.name)}
-            <div style={fieldWidthStyle(field)} data-field={field.name}>
-              {@render fieldContent(field)}
-            </div>
-          {/each}
-        </div>
+        <!-- Custom action — extended in Step B/C -->
+        <button class="btn btn-secondary py-1.5 text-xs" disabled>
+          {action.label ?? action.id}
+        </button>
       {/if}
     {/each}
-  </div>
-</div>
+  {/if}
+{/snippet}
+
+<!-- ── Status area snippet ───────────────────────────────────────────────── -->
+{#snippet statusArea()}
+  {@const activeStatus = internalStatus ?? status}
+  {#if activeStatus}
+    <span class="flex items-center gap-1 text-xs {STATUS_COLOR[activeStatus.type ?? 'info']}">
+      <span aria-hidden="true">{STATUS_ICON[activeStatus.type ?? 'info']}</span>
+      {activeStatus.message}
+    </span>
+  {:else if dirty && isEditable}
+    <span class="text-xs" style="color: var(--cf-text-subtle)">Modifiche non salvate</span>
+  {/if}
+{/snippet}
 
 <!-- ── Field content snippet ────────────────────────────────────────────── -->
 {#snippet fieldContent(field: FormField)}
@@ -371,15 +594,15 @@
 
   <!-- Widget -->
   <div id="field-{field.name}">
-    {#if widgetType === 'text'}
+    {#if widgetType === 'text' || widgetType === 'password'}
       <WidgetText
         value={draft[field.name]}
         onchange={(v) => patch(field.name, v)}
         onblur={() => validateField(field.name)}
         readonly={fieldReadonly}
+        type={widgetType}
         {field}
       />
-
     {:else if widgetType === 'textarea'}
       <WidgetTextarea
         value={draft[field.name]}
@@ -388,7 +611,6 @@
         readonly={fieldReadonly}
         {field}
       />
-
     {:else if widgetType === 'number'}
       <WidgetNumber
         value={draft[field.name]}
@@ -397,16 +619,24 @@
         readonly={fieldReadonly}
         {field}
       />
-
     {:else if widgetType === 'date' || widgetType === 'datetime'}
       <WidgetDate
         value={draft[field.name]}
         onchange={(v) => patch(field.name, v)}
         onblur={() => validateField(field.name)}
         readonly={fieldReadonly}
+        granularity={widgetType === 'datetime' ? ((field.granularity as string) ?? 'minute') : 'day'}
         {field}
       />
-
+    {:else if widgetType === 'time'}
+      <WidgetText
+        value={draft[field.name]}
+        onchange={(v) => patch(field.name, v)}
+        onblur={() => validateField(field.name)}
+        readonly={fieldReadonly}
+        type="time"
+        {field}
+      />
     {:else if widgetType === 'boolean'}
       <div class="flex items-center gap-3">
         <WidgetBoolean
@@ -423,7 +653,6 @@
           {/if}
         </span>
       </div>
-
     {:else if widgetType === 'combobox'}
       <WidgetCombobox
         value={draft[field.name]}
@@ -432,7 +661,6 @@
         readonly={fieldReadonly}
         {field}
       />
-
     {:else}
       <WidgetText
         value={draft[field.name]}

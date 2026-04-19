@@ -56,7 +56,12 @@
     panels?: SplitArea[];
   }
 
-  let { panel }: { panel: Panel } = $props();
+  interface PanelRendererProps {
+    panel: Panel;
+    onEvent?: (area: string, name: string, data: unknown) => void;
+  }
+
+  let { panel, onEvent: onExternalEvent }: PanelRendererProps = $props();
 
   const areas = $derived((panel.panels ?? []) as SplitArea[]);
 
@@ -84,6 +89,7 @@
 
   function handleAreaEvent(sourceId: string, eventName: string, payload: unknown) {
     const data = (payload ?? {}) as Record<string, unknown>;
+    onExternalEvent?.(sourceId, eventName, data);
     for (const area of areas) {
       const trig = area.trigger;
       if (!trig) continue;

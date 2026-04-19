@@ -4,8 +4,15 @@ interface CoframeApiConfig {
   endpointPrefix: string;
 }
 
+export interface CoframeFormDefaults {
+  toolbar_position: 'top' | 'bottom';
+  button_align: 'left' | 'right';
+  button_style: 'label' | 'icon' | 'icon-label';
+}
+
 interface CoframeConfig {
   api: CoframeApiConfig;
+  form: CoframeFormDefaults;
 }
 
 let _config: CoframeConfig = {
@@ -13,11 +20,17 @@ let _config: CoframeConfig = {
     baseUrl:        import.meta.env.VITE_API_BASE_URL        ?? '',
     prefix:         import.meta.env.VITE_API_PREFIX          ?? 'coframe',
     endpointPrefix: import.meta.env.VITE_API_ENDPOINT_PREFIX ?? 'endpoint',
-  }
+  },
+  form: {
+    toolbar_position: 'top',
+    button_align: 'left',
+    button_style: 'icon',
+  },
 };
 
-export const initCoframe = (cfg: { api?: Partial<CoframeApiConfig> }) => {
-  if (cfg.api) _config = { ..._config, api: { ..._config.api, ...cfg.api } };
+export const initCoframe = (cfg: { api?: Partial<CoframeApiConfig>; form?: Partial<CoframeFormDefaults> }) => {
+  if (cfg.api)  _config = { ..._config, api:  { ..._config.api,  ...cfg.api  } };
+  if (cfg.form) _config = { ..._config, form: { ..._config.form, ...cfg.form } };
 };
 
 export const getConfig = (): CoframeConfig => _config;

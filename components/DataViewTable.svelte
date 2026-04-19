@@ -22,6 +22,7 @@
     treeChildField = 'children',
     treeStartExpanded = false,
     onRowClick = undefined as ((row: unknown) => void) | undefined,
+    onRowDblClick = undefined as ((row: unknown) => void) | undefined,
     onSelectionChange = undefined as ((rows: unknown[]) => void) | undefined,
     onDataLoaded = undefined as ((count: number) => void) | undefined,
     onFiltered = undefined as ((count: number) => void) | undefined,
@@ -36,6 +37,7 @@
     treeChildField?: string;
     treeStartExpanded?: boolean;
     onRowClick?: (row: unknown) => void;
+    onRowDblClick?: (row: unknown) => void;
     onSelectionChange?: (rows: unknown[]) => void;
     onDataLoaded?: (count: number) => void;
     onFiltered?: (count: number) => void;
@@ -68,6 +70,7 @@
   {treeChildField}
   {treeStartExpanded}
   {onRowClick}
+  {onRowDblClick}
   {onSelectionChange}
   {onDataLoaded}
   {onFiltered}

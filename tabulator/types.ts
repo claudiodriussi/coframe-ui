@@ -42,6 +42,7 @@ export interface CoframeTableConfig {
   treeChildField: string;
   treeStartExpanded: boolean;
   onRowClick?: (row: any) => void;
+  onRowDblClick?: (row: any) => void;
   onCellClick?: (cell: CellInfo) => void;
   onSelectionChange?: (rows: any[]) => void;
   onDataLoaded?: (count: number) => void;

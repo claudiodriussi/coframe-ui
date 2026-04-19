@@ -499,6 +499,7 @@
         {treeChildField}
         {treeStartExpanded}
         onRowClick={(row) => onEvent?.('row_click', row)}
+        onRowDblClick={(row) => onEvent?.('row_dblclick', row)}
         onSelectionChange={handleSelectionChange}
         onDataLoaded={handleDataLoaded}
         onFiltered={handleFiltered}
