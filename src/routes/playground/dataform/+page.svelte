@@ -54,10 +54,22 @@
     policy: { editable: false },
   };
 
-  // ── View mode + status ─────────────────────────────────────────────────────
+  // ── View mode + toolbar layout ─────────────────────────────────────────────
 
-  let mode = $state<'edit' | 'readonly'>('edit');
-  let activeDescriptor = $derived(mode === 'edit' ? editDescriptor : readonlyDescriptor);
+  let mode            = $state<'edit' | 'readonly'>('edit');
+  let toolbarPosition = $state<'top' | 'bottom'>('top');
+  let buttonAlign     = $state<'left' | 'right'>('left');
+  let buttonStyle     = $state<'label' | 'icon' | 'icon-label'>('label');
+
+  let activeDescriptor = $derived<FormDescriptor>({
+    ...(mode === 'edit' ? editDescriptor : readonlyDescriptor),
+    policy: {
+      editable: mode === 'edit',
+      toolbar_position: toolbarPosition,
+      button_align: buttonAlign,
+      button_style: buttonStyle,
+    },
+  });
 
   // Demo: status nella toolbar
   let statusDemo = $state<FormStatus | undefined>(undefined);
@@ -95,24 +107,67 @@
   </p>
 
   <!-- Controls -->
-  <div class="mb-4 flex flex-wrap items-center gap-3">
+  <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+
     <!-- Editable toggle -->
-    <div class="flex gap-1">
-      <button
-        class="btn {mode === 'edit' ? 'btn-primary' : 'btn-secondary'} py-1.5 text-xs"
-        onclick={() => (mode = 'edit')}
-      >Editabile</button>
-      <button
-        class="btn {mode === 'readonly' ? 'btn-primary' : 'btn-secondary'} py-1.5 text-xs"
-        onclick={() => (mode = 'readonly')}
-      >Read-only</button>
+    <div class="flex items-center gap-1.5">
+      <span class="text-xs text-gray-500">Modalità:</span>
+      <div class="flex gap-1">
+        {#each (['edit', 'readonly'] as const) as m}
+          <button
+            class="btn py-1 text-xs {mode === m ? 'btn-primary' : 'btn-secondary'}"
+            onclick={() => (mode = m)}
+          >{m === 'edit' ? 'Editabile' : 'Read-only'}</button>
+        {/each}
+      </div>
+    </div>
+
+    <span class="text-xs text-gray-300">|</span>
+
+    <!-- toolbar_position -->
+    <div class="flex items-center gap-1.5">
+      <span class="text-xs text-gray-500">Toolbar:</span>
+      <div class="flex gap-1">
+        {#each (['top', 'bottom'] as const) as pos}
+          <button
+            class="btn py-1 text-xs {toolbarPosition === pos ? 'btn-primary' : 'btn-secondary'}"
+            onclick={() => (toolbarPosition = pos)}
+          >{pos}</button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- button_align -->
+    <div class="flex items-center gap-1.5">
+      <span class="text-xs text-gray-500">Bottoni:</span>
+      <div class="flex gap-1">
+        {#each (['left', 'right'] as const) as align}
+          <button
+            class="btn py-1 text-xs {buttonAlign === align ? 'btn-primary' : 'btn-secondary'}"
+            onclick={() => (buttonAlign = align)}
+          >{align}</button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- button_style -->
+    <div class="flex items-center gap-1.5">
+      <span class="text-xs text-gray-500">Stile:</span>
+      <div class="flex gap-1">
+        {#each (['label', 'icon', 'icon-label'] as const) as style}
+          <button
+            class="btn py-1 text-xs {buttonStyle === style ? 'btn-primary' : 'btn-secondary'}"
+            onclick={() => (buttonStyle = style)}
+          >{style}</button>
+        {/each}
+      </div>
     </div>
 
     <span class="text-xs text-gray-300">|</span>
 
     <!-- Status demo -->
-    <div class="flex items-center gap-2">
-      <span class="text-xs text-gray-500">Status toolbar:</span>
+    <div class="flex items-center gap-1.5">
+      <span class="text-xs text-gray-500">Status:</span>
       <div class="flex gap-1">
         {#each statusOptions as opt}
           <button

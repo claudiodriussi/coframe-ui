@@ -44,6 +44,7 @@
 		"axios": "^1.13.5",
 		"bits-ui": "^2.16.0",
 		"jwt-decode": "^4.0.0",
+		"lucide-svelte": "^1.0.1",
 		"split.js": "^1.6.5",
 		"tabulator-tables": "^6.3.1"
 	}
