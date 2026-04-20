@@ -22,6 +22,7 @@
   let error         = $state<string | null>(null);
   let loading       = $state(false);
   let reloadKey     = $state(0);
+  let focusRowId    = $state<unknown>(null);
 
   async function openTable(tableName: string) {
     selectedTable = tableName;
@@ -29,6 +30,7 @@
     error         = null;
     formDescriptor = null;
     loading       = true;
+    focusRowId    = null;
     try {
       const res = await api.endpoint('get_page', { id: `${tableName.toLowerCase()}_list` });
       if (res.status === 'success') {
@@ -74,6 +76,7 @@
   // ── Open edit / add via stack ────────────────────────────────────────────
 
   async function openEdit(id: number | string) {
+    focusRowId = id;
     const ok = await ensureFormDescriptor();
     if (!ok || !formDescriptor || !selectedTable) return;
     stack.push(TableFormView, {
@@ -151,7 +154,7 @@
             {formLoading ? 'Caricamento…' : '+ Nuovo'}
           </button>
           <span class="text-xs text-gray-400">
-            Doppio click su una riga per modificarla
+            Doppio click o Invio su una riga per modificarla
           </span>
         </div>
       {/if}
@@ -172,7 +175,7 @@
 
         {:else if panel}
           {#key reloadKey}
-            <PanelRenderer {panel} onEvent={handlePanelEvent} />
+            <PanelRenderer {panel} {focusRowId} onEvent={handlePanelEvent} />
           {/key}
 
         {:else}

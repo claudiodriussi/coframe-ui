@@ -15,8 +15,8 @@
     onSaved: () => void;
   } = $props();
 
-  const isNew = recordId === null;
-  const title = isNew ? `Nuovo ${tableName}` : `Modifica ${tableName}`;
+  const isNew = $derived(recordId === null);
+  const title = $derived(isNew ? `Nuovo ${tableName}` : `Modifica ${tableName}`);
 
   function handleSave() {
     onSaved();
