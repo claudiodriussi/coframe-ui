@@ -16,6 +16,7 @@
     { href: '/playground/pages3', label: 'Page Nested Splits' },
     { href: '/playground/triggers', label: 'Trigger System' },
     { href: '/playground/tables',   label: 'Table Browser' },
+    { href: '/playground/tables2',  label: 'Table Browser 2 (Navigator)' },
     { href: '/playground/dataform', label: 'DataForm (Step A)' },
     { href: '/playground/dataform-b', label: 'DataForm (Step B — endpoint)' }
   ];
