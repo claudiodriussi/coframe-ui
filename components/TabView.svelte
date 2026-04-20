@@ -37,7 +37,12 @@
     onEvent?: (name: string, data: unknown) => void;
   } = $props();
 
-  let activeId = $state(tabs[0]?.id ?? '');
+  let activeId = $state('');
+  $effect(() => {
+    if (tabs.length > 0 && !tabs.find(t => t.id === activeId)) {
+      activeId = tabs[0].id;
+    }
+  });
 </script>
 
 <div class="cf-tabview">

@@ -12,10 +12,11 @@
     view: Record<string, unknown>;
     trigger?: Record<string, unknown>;
     collapsed?: boolean;
+    focusRowId?: unknown;
     onEvent?: (name: string, data: unknown) => void;
   }
 
-  let { view, trigger, collapsed, onEvent }: Props = $props();
+  let { view, trigger, collapsed, focusRowId, onEvent }: Props = $props();
 </script>
 
 {#if view.type === 'form'}
@@ -37,6 +38,7 @@
     view={view as ViewDescriptor}
     trigger={trigger}
     collapsed={collapsed}
+    {focusRowId}
     onEvent={onEvent}
   />
 

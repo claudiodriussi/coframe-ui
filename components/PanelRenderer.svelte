@@ -58,10 +58,11 @@
 
   interface PanelRendererProps {
     panel: Panel;
+    focusRowId?: unknown;
     onEvent?: (area: string, name: string, data: unknown) => void;
   }
 
-  let { panel, onEvent: onExternalEvent }: PanelRendererProps = $props();
+  let { panel, focusRowId, onEvent: onExternalEvent }: PanelRendererProps = $props();
 
   const areas = $derived((panel.panels ?? []) as SplitArea[]);
 
@@ -154,6 +155,7 @@
           {#if panel.content}
             <ViewRenderer
               view={panel.content}
+              {focusRowId}
               onEvent={(n, d) => handleAreaEvent('content', n, d)}
             />
           {/if}

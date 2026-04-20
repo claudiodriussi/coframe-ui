@@ -25,12 +25,13 @@
 
 <div class="stack-container">
   {#each $stack as page, i (page.id)}
+    {@const Component = page.component}
     <div
       class="stack-page"
       class:hidden={i < $stack.length - 1}
       transition:fly={{ x: 300, duration: 200 }}
     >
-      <svelte:component this={page.component} {...page.props} />
+      <Component {...page.props} />
     </div>
   {/each}
 </div>

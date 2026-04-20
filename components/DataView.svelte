@@ -64,12 +64,14 @@
     trigger = undefined as Record<string, unknown> | undefined,
     collapsed = false,
     data: propData = undefined as unknown[] | undefined,
+    focusRowId = undefined as unknown,
     onEvent = undefined as ((name: string, data: unknown) => void) | undefined,
   }: {
     view: ViewDescriptor;
     trigger?: Record<string, unknown>;
     collapsed?: boolean;
     data?: unknown[];
+    focusRowId?: unknown;
     onEvent?: (name: string, data: unknown) => void;
   } = $props();
 
@@ -414,7 +416,12 @@
     rowCount = count;
     filteredCount = null;
     onEvent?.('data_load', { count });
-    if (!loadingMore) saveViewState();
+    if (!loadingMore) {
+      saveViewState();
+      if (focusRowId != null) {
+        queueMicrotask(() => tableRef?.focusRowById(focusRowId));
+      }
+    }
   }
 
   function handleFiltered(count: number) {

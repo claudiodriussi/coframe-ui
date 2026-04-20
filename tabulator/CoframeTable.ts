@@ -301,6 +301,13 @@ export class CoframeTable {
       return;
     }
 
+    // Enter — activate the current row (edit in normal mode, confirm in lookup)
+    if (e.key === 'Enter' && this._activeRow) {
+      e.preventDefault();
+      this.config.onRowDblClick?.(this._activeRow.getData());
+      return;
+    }
+
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
 
@@ -325,6 +332,28 @@ export class CoframeTable {
         displayRows[nextIdx].scrollTo(pos, false);
       } catch (_) {}
     }
+  }
+
+  // ── Public API — focus ────────────────────────────────────────────────────
+
+  /**
+   * Focus the row with the given id: set it as active, scroll into view,
+   * focus the container (keyboard nav), emit row_click to update detail panels.
+   */
+  focusRowById(id: unknown) {
+    if (!this.table) return;
+    const rows: any[] = this.table.getRows() ?? [];
+    const row = rows.find((r: any) => r.getData()?.id === id);
+    if (!row) return;
+    if (this._activeRow) {
+      try { this._activeRow.getElement().classList.remove('cf-row-active'); } catch (_) {}
+    }
+    this._activeRow = row;
+    this._activeRowId = id;
+    try { row.getElement().classList.add('cf-row-active'); } catch (_) {}
+    try { row.scrollTo('nearest', false); } catch (_) {}
+    this._container.focus();
+    this.config.onRowClick?.(row.getData());
   }
 
   // ── Public API — column / data ─────────────────────────────────────────────

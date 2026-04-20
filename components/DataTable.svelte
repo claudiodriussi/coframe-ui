@@ -124,6 +124,8 @@
   export async function addRows(newRows: any[]): Promise<number> {
     return cfTable?.addRows(newRows) ?? 0;
   }
+
+  export function focusRowById(id: unknown) { cfTable?.focusRowById(id); }
 </script>
 
 <div bind:this={container} class="cf-datatable" tabindex="-1"></div>
