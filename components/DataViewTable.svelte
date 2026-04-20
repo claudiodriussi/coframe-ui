@@ -28,6 +28,14 @@
     onFiltered = undefined as ((count: number) => void) | undefined,
     onSorted = undefined as (() => void) | undefined,
     onReady = undefined as (() => void) | undefined,
+    onNavAdd = undefined as (() => void) | undefined,
+    onNavEdit = undefined as (() => void) | undefined,
+    onNavDelete = undefined as (() => void) | undefined,
+    onNavCommands = undefined as (() => void) | undefined,
+    onNavRefresh = undefined as (() => void) | undefined,
+    onNavExport = undefined as (() => void) | undefined,
+    onNavPrint = undefined as (() => void) | undefined,
+    onNavCancel = undefined as (() => void) | undefined,
   }: {
     rows?: unknown[];
     columnDefs?: ColumnDef[];
@@ -43,6 +51,14 @@
     onFiltered?: (count: number) => void;
     onSorted?: () => void;
     onReady?: () => void;
+    onNavAdd?: () => void;
+    onNavEdit?: () => void;
+    onNavDelete?: () => void;
+    onNavCommands?: () => void;
+    onNavRefresh?: () => void;
+    onNavExport?: () => void;
+    onNavPrint?: () => void;
+    onNavCancel?: () => void;
   } = $props();
 
   let tableRef: DataTable | null = $state(null);
@@ -77,4 +93,12 @@
   {onFiltered}
   {onSorted}
   {onReady}
+  {onNavAdd}
+  {onNavEdit}
+  {onNavDelete}
+  {onNavCommands}
+  {onNavRefresh}
+  {onNavExport}
+  {onNavPrint}
+  {onNavCancel}
 />

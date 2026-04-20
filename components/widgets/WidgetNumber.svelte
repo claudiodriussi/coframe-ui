@@ -31,28 +31,39 @@
   }
 </script>
 
-<div class="relative flex items-center">
-  {#if prefix}
-    <span class="absolute left-3 select-none text-sm text-gray-400">{prefix}</span>
-  {/if}
+{#if readonly}
+  <span class="cf-widget-ro">{state.current ?? ''}{suffix ? ` ${suffix}` : ''}</span>
+{:else}
+  <div class="relative flex items-center">
+    {#if prefix}
+      <span class="absolute left-3 select-none text-sm text-gray-400">{prefix}</span>
+    {/if}
+    <input
+      type="number"
+      class="input {field.error ? 'input-error' : ''} {prefix ? 'pl-8' : ''} {suffix ? 'pr-8' : ''}"
+      value={state.current}
+      oninput={(e) => { state.current = (e.target as HTMLInputElement).value; const n = parseFloat(state.current); if (state.current === '' || !isNaN(n)) onchange(state.current === '' ? null : n); }}
+      onblur={handleBlur}
+      onkeydown={dispatchEnter}
+      {step}
+      min={field.widget_props?.min as number | undefined}
+      max={field.widget_props?.max as number | undefined}
+      placeholder={field.placeholder as string | undefined}
+      aria-label={field.label ?? field.name}
+    />
+    {#if suffix}
+      <span class="absolute right-3 select-none text-sm text-gray-400">{suffix}</span>
+    {/if}
+  </div>
+{/if}
 
-  <input
-    type="number"
-    class="input {field.error ? 'input-error' : ''} {readonly ? 'read-only:bg-gray-50 read-only:cursor-default read-only:text-gray-600' : ''}
-           {prefix ? 'pl-8' : ''} {suffix ? 'pr-8' : ''}"
-    value={state.current}
-    oninput={(e) => { state.current = (e.target as HTMLInputElement).value; const n = parseFloat(state.current); if (state.current === '' || !isNaN(n)) onchange(state.current === '' ? null : n); }}
-    onblur={handleBlur}
-    onkeydown={dispatchEnter}
-    {readonly}
-    {step}
-    min={field.widget_props?.min as number | undefined}
-    max={field.widget_props?.max as number | undefined}
-    placeholder={field.placeholder as string | undefined}
-    aria-label={field.label ?? field.name}
-  />
-
-  {#if suffix}
-    <span class="absolute right-3 select-none text-sm text-gray-400">{suffix}</span>
-  {/if}
-</div>
+<style>
+  .cf-widget-ro {
+    display: block;
+    padding: 0.4rem 0;
+    font-size: 0.875rem;
+    color: var(--cf-text);
+    min-height: 2rem;
+    line-height: 1.5;
+  }
+</style>

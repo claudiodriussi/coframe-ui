@@ -49,4 +49,13 @@ export interface CoframeTableConfig {
   onFiltered?: (count: number) => void;
   onSorted?: () => void;
   onReady?: () => void;
+  // Navigator action callbacks — fired by keyboard shortcuts
+  onNavAdd?: () => void;
+  onNavEdit?: () => void;
+  onNavDelete?: () => void;
+  onNavCommands?: () => void;
+  onNavRefresh?: () => void;
+  onNavExport?: () => void;
+  onNavPrint?: () => void;
+  onNavCancel?: () => void;
 }

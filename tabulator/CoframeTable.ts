@@ -294,18 +294,77 @@ export class CoframeTable {
   private _handleKeyNav(e: KeyboardEvent) {
     if (!this.table) return;
 
-    // Space — toggle checkbox on active row when in selection mode
-    if (e.key === ' ' && this.config.selectable && this._activeRow) {
-      e.preventDefault();
-      this._activeRow.toggleSelect();
-      return;
-    }
+    // Ignore shortcuts when focus is inside an input/textarea (e.g. header filters)
+    const target = e.target as HTMLElement;
+    const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
-    // Enter — activate the current row (edit in normal mode, confirm in lookup)
-    if (e.key === 'Enter' && this._activeRow) {
-      e.preventDefault();
-      this.config.onRowDblClick?.(this._activeRow.getData());
-      return;
+    if (!inInput) {
+      // Ins / + → Add
+      if ((e.key === 'Insert' || e.key === '+') && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        this.config.onNavAdd?.();
+        return;
+      }
+
+      // Del / - → Delete
+      if ((e.key === 'Delete' || e.key === '-') && !e.ctrlKey && !e.altKey && this._activeRow) {
+        e.preventDefault();
+        this.config.onNavDelete?.();
+        return;
+      }
+
+      // Ctrl+Enter → Edit (always, regardless of mode)
+      if (e.key === 'Enter' && e.ctrlKey && this._activeRow) {
+        e.preventDefault();
+        this.config.onNavEdit?.();
+        return;
+      }
+
+      // Enter — dblclick action (edit in browser, accept in lookup)
+      if (e.key === 'Enter' && !e.ctrlKey && this._activeRow) {
+        e.preventDefault();
+        this.config.onRowDblClick?.(this._activeRow.getData());
+        return;
+      }
+
+      // Space — toggle checkbox if selection mode, else open commands menu
+      if (e.key === ' ') {
+        e.preventDefault();
+        if (this.config.selectable && this._activeRow) {
+          this._activeRow.toggleSelect();
+        } else {
+          this.config.onNavCommands?.();
+        }
+        return;
+      }
+
+      // F5 → Print
+      if (e.key === 'F5') {
+        e.preventDefault();
+        this.config.onNavPrint?.();
+        return;
+      }
+
+      // F6 → Refresh
+      if (e.key === 'F6') {
+        e.preventDefault();
+        this.config.onNavRefresh?.();
+        return;
+      }
+
+      // F7 → Export
+      if (e.key === 'F7') {
+        e.preventDefault();
+        this.config.onNavExport?.();
+        return;
+      }
+
+      // Escape → Cancel / close
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this.config.onNavCancel?.();
+        return;
+      }
     }
 
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;

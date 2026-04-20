@@ -50,6 +50,26 @@ export interface ViewTreeConfig {
   start_expanded?: boolean;
 }
 
+export interface CommandItem {
+  id: string;
+  label: string;
+  icon?: string;
+  scope?: 'row' | 'selection' | 'global';
+  toolbar?: boolean;   // true → shown as direct button in navigator
+  endpoint?: string;   // endpoint to call when activated
+  [key: string]: unknown;
+}
+
+export interface NavigatorConfig {
+  form_id?: string;    // default: {model.lower()}_form
+  handler?: string;    // view_handler chain name
+  show?: string[];     // add to defaults
+  hide?: string[];     // remove from defaults
+  commands?: CommandItem[];
+  // mode is internal only — set programmatically (e.g. 'lookup' for FK picker)
+  mode?: 'browser' | 'lookup' | 'readonly';
+}
+
 export interface ViewDescriptor {
   type: 'table' | 'tree' | 'kanban' | 'cards' | string;
   title?: string;
@@ -58,6 +78,7 @@ export interface ViewDescriptor {
   actions?: ViewActions;
   policy?: ViewPolicy;
   tree?: ViewTreeConfig;
+  navigator?: boolean | NavigatorConfig;
   /** List of available view types for the toolbar switcher (e.g. ['table','kanban']). */
   allow_views?: string[];
   [key: string]: unknown;

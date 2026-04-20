@@ -16,12 +16,15 @@
    *   onEvent  (name, data) => void      unified event emitter (row_click, data_load, …)
    */
   import { untrack } from 'svelte';
-  import DataViewToolbar from './DataViewToolbar.svelte';
+  import DataViewNavigator from './DataViewNavigator.svelte';
   import DataViewTable from './DataViewTable.svelte';
+  import DataFormView from './DataFormView.svelte';
+  import StackContainer from '$coframe/stack/StackContainer.svelte';
   import type { ColumnDef } from '$coframe/tabulator/CoframeTable';
   import { api } from '$coframe/api/client';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
   import { resolveFormatter } from '$coframe/formatters/registry';
+  import { stack } from '$coframe/stack/stack.svelte';
   import {
     extractFieldKey,
     applyTriggerVars,
@@ -37,9 +40,11 @@
     ViewPolicy,
     ViewTreeConfig,
     ViewDescriptor,
+    NavigatorConfig,
+    CommandItem,
   } from './dataview.types';
 
-  import type { ViewDescriptor } from './dataview.types';
+  import type { ViewDescriptor, NavigatorConfig, CommandItem } from './dataview.types';
 
   // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -119,6 +124,8 @@
   let tabulatorReady = $state(false);
   let restoreComplete = $state(false);
   let bannerRowCount = $state<number | null>(null);
+  let _activeRowData = $state<Record<string, unknown> | null>(null);
+  let _internalFocusId = $state<unknown>(null);
 
   // Active view type — initialized from descriptor, switchable in future.
   // untrack: intentionally captures only the initial value (user can switch at runtime).
@@ -136,11 +143,30 @@
     serverConfig.tables[view.source?.model ?? '']?.pk_fields?.[0] ?? 'id'
   );
   const allowViews = $derived(view.allow_views ?? []);
-  const toolbarItems = $derived(view.actions?.toolbar ?? []);
   const selectable = $derived(selectMode || view.policy?.selection === true);
   const isTreeMode = $derived(activeViewType === 'tree');
   const treeChildField = $derived(view.tree?.child_field ?? 'children');
   const treeStartExpanded = $derived(view.tree?.start_expanded ?? false);
+
+  // ── Navigator ──────────────────────────────────────────────────────────────
+
+  // navigator: true (default) | false | NavigatorConfig object
+  const showNavigator = $derived(view.navigator !== false);
+  const navigatorConfig = $derived(
+    typeof view.navigator === 'object' && view.navigator !== null
+      ? view.navigator as NavigatorConfig
+      : undefined
+  );
+  const navigatorMode = $derived(navigatorConfig?.mode ?? 'browser');
+
+  // Derive form_id: explicit in config, or auto from model name
+  const formId = $derived(
+    navigatorConfig?.form_id ??
+    (view.source?.model ? `${(view.source.model as string).toLowerCase()}_form` : null)
+  );
+
+  // The effective focus id: internal (post-edit) wins over external prop
+  const _effectiveFocusId = $derived(_internalFocusId ?? focusRowId);
 
   // ── State persistence ──────────────────────────────────────────────────────
 
@@ -392,7 +418,7 @@
 
   $effect(() => { loadData(); });
 
-  // ── Toolbar actions ────────────────────────────────────────────────────────
+  // ── Toolbar / export actions ───────────────────────────────────────────────
 
   function handleExport() {
     const name = (view.source?.model ?? view.title ?? 'export').toLowerCase();
@@ -410,6 +436,77 @@
     saveViewState();
   }
 
+  // ── Navigator CRUD ─────────────────────────────────────────────────────────
+
+  function openForm(recordId: unknown, isNew: boolean) {
+    if (!formId) return;
+    const model = (view.source?.model as string | undefined) ?? '';
+    const label = isNew ? `Nuovo ${model}` : `Modifica ${model}`;
+    stack.push(DataFormView, {
+      formId,
+      recordId: recordId ?? null,
+      title: label,
+      onSaved: () => {
+        // Remember which row to focus after reload
+        if (!isNew && recordId != null) _internalFocusId = recordId;
+        reloadData();
+      },
+    });
+  }
+
+  function reloadData() {
+    // Reset initialization to force a full reload
+    initialized = false;
+    tabulatorReady = false;
+    alignsInferred = false;
+    restoreComplete = false;
+    loadData();
+  }
+
+  function handleNavAdd() {
+    openForm(null, true);
+  }
+
+  function handleNavEdit() {
+    if (_activeRowData == null) return;
+    const id = (_activeRowData as any)[pkField];
+    openForm(id, false);
+  }
+
+  async function handleNavDelete() {
+    if (_activeRowData == null) return;
+    const id = (_activeRowData as any)[pkField];
+    if (!confirm(`Eliminare il record selezionato?`)) return;
+    const model = view.source?.model as string | undefined;
+    if (!model) return;
+    try {
+      const res = await api.endpoint('db', { table: model, method: 'delete', id });
+      if (res.status === 'success') {
+        _activeRowData = null;
+        _internalFocusId = null;
+        reloadData();
+      } else {
+        alert(res.message ?? 'Errore durante l\'eliminazione');
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // row_dblclick → opens form when navigator present, otherwise emits event to parent
+  function handleRowDblClick(row: unknown) {
+    const rowData = row as Record<string, unknown>;
+    _activeRowData = rowData;
+    if (showNavigator && navigatorMode === 'browser' && formId) {
+      // Navigator owns the action — open form directly
+      const id = rowData[pkField];
+      openForm(id, false);
+    } else {
+      // No navigator — emit event for parent to handle
+      onEvent?.('row_dblclick', row);
+    }
+  }
+
   // ── Internal callbacks ─────────────────────────────────────────────────────
 
   function handleDataLoaded(count: number) {
@@ -418,8 +515,9 @@
     onEvent?.('data_load', { count });
     if (!loadingMore) {
       saveViewState();
-      if (focusRowId != null) {
-        queueMicrotask(() => tableRef?.focusRowById(focusRowId));
+      const fid = _effectiveFocusId;
+      if (fid != null) {
+        queueMicrotask(() => tableRef?.focusRowById(fid));
       }
     }
   }
@@ -442,10 +540,10 @@
 
 <div class="cf-dataview">
 
-  <!-- ── Toolbar — shown only when there are actions or more rows to load ── -->
-  {#if toolbarItems.length > 0 || hasMore || loadingMore}
-    <DataViewToolbar
-      {toolbarItems}
+  <!-- ── Navigator (shown when navigator config present or default browser mode) -->
+  {#if showNavigator}
+    <DataViewNavigator
+      config={navigatorConfig}
       {filterMode}
       {selectMode}
       {loading}
@@ -455,11 +553,14 @@
       {filteredCount}
       {totalCount}
       {selectedCount}
-      {allowViews}
-      {activeViewType}
+      activeRowId={_activeRowData ? (_activeRowData as any)[pkField] : null}
+      onAdd={handleNavAdd}
+      onEdit={handleNavEdit}
+      onDelete={handleNavDelete}
       onToggleFilter={toggleFilter}
       onToggleSelect={toggleSelect}
       onExport={handleExport}
+      onRefresh={reloadData}
       onLoadMore={loadMore}
     />
   {/if}
@@ -505,21 +606,34 @@
         {isTreeMode}
         {treeChildField}
         {treeStartExpanded}
-        onRowClick={(row) => onEvent?.('row_click', row)}
-        onRowDblClick={(row) => onEvent?.('row_dblclick', row)}
+        onRowClick={(row) => { _activeRowData = row as Record<string,unknown>; onEvent?.('row_click', row); }}
+        onRowDblClick={handleRowDblClick}
         onSelectionChange={handleSelectionChange}
         onDataLoaded={handleDataLoaded}
         onFiltered={handleFiltered}
         onSorted={handleSorted}
         onReady={() => { tabulatorReady = true; }}
+        onNavAdd={handleNavAdd}
+        onNavEdit={handleNavEdit}
+        onNavDelete={handleNavDelete}
+        onNavExport={handleExport}
+        onNavRefresh={reloadData}
       />
     {/if}
   </div>
+
+  <!-- ── Stack overlay (forms open on top when navigator is active) ─────── -->
+  {#if showNavigator && $stack.length > 0}
+    <div class="cf-dv-stack-overlay">
+      <StackContainer />
+    </div>
+  {/if}
 
 </div>
 
 <style>
   .cf-dataview {
+    position: relative;
     display: flex;
     flex-direction: column;
     width: 100%;
@@ -598,5 +712,12 @@
     font-size: 0.8rem;
     padding: 1rem;
     text-align: center;
+  }
+
+  /* ── Stack overlay — covers the entire DataView for form pages ───────── */
+  .cf-dv-stack-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
   }
 </style>
