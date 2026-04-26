@@ -9,7 +9,7 @@
    *   formId      string              e.g. 'book_form'
    *   recordId    string|number|null  null = new record
    *   title       string              shown in header bar
-   *   onSaved     () => void          called after successful save (before pop)
+   *   onSaved     (savedData) => void  called after successful save with merged record (before pop)
    */
   import { stack } from '$coframe/stack/stack.svelte';
   import { api } from '$coframe/api/client';
@@ -21,11 +21,13 @@
     recordId = null,
     title = '',
     onSaved,
+    onCancel,
   }: {
     formId: string;
     recordId?: string | number | null;
     title?: string;
-    onSaved?: () => void;
+    onSaved?: (savedData: Record<string, unknown>) => void;
+    onCancel?: () => void;
   } = $props();
 
   let descriptor = $state<FormDescriptor | null>(null);
@@ -57,12 +59,13 @@
   // Load on mount
   $effect(() => { loadDescriptor(); });
 
-  function handleSave() {
-    onSaved?.();
+  function handleSave(savedData: Record<string, unknown>) {
+    onSaved?.(savedData);
     stack.pop();
   }
 
   function handleCancel() {
+    onCancel?.();
     stack.pop();
   }
 </script>
@@ -72,7 +75,7 @@
   <div class="cf-form-view-header">
     <button
       class="cf-form-view-back"
-      onclick={() => stack.pop()}
+      onclick={handleCancel}
       title="Torna alla lista"
       aria-label="Torna"
     >

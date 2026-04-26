@@ -3,15 +3,14 @@
    * DataTable.svelte — thin Svelte 5 wrapper around CoframeTable.
    *
    * Responsibilities:
-   *   - Declares and owns the container <div> (bind:this)
+   *   - Initialises CoframeTable via @attach (setup + teardown colocated)
    *   - Translates reactive Svelte props into CoframeTable method calls via $effects
-   *   - Manages Svelte lifecycle (onMount / onDestroy)
    *   - Re-exports shared types so consumers import from one place
    *
    * All Tabulator logic (column building, event wiring, keyboard nav,
    * ResizeObserver, _meta system) lives in CoframeTable.ts.
    */
-  import { onMount, onDestroy } from 'svelte';
+  import { untrack } from 'svelte';
   import 'tabulator-tables/dist/css/tabulator.min.css';
   import { CoframeTable } from '../tabulator/CoframeTable';
   import type { ColumnDef, SortDef, CellInfo } from '../tabulator/CoframeTable';
@@ -78,32 +77,12 @@
 
   // ── Internal state ─────────────────────────────────────────────────────────
 
-  let container: HTMLDivElement;
   let cfTable: CoframeTable | null = null;
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-
-  onMount(async () => {
-    cfTable = await CoframeTable.create(container, {
-      data, columns, selectable, filterMode, mode, pageSize, rowHeight: rowHeight,
-      initialSort, treeMode, treeChildField, treeStartExpanded,
-      onRowClick, onRowDblClick, onCellClick, onSelectionChange, onDataLoaded, onFiltered, onSorted, onReady,
-      onNavAdd, onNavEdit, onNavDelete, onNavCommands, onNavRefresh, onNavExport, onNavPrint, onNavCancel,
-    });
-    // Re-apply columns in case they changed while create() was awaiting
-    // (e.g. inferred alignments/formatters set by DataView after first data load).
-    cfTable.updateColumns(columns, selectable, filterMode);
-  });
-
-  onDestroy(() => {
-    cfTable?.destroy();
-    cfTable = null;
-  });
 
   // ── Reactive prop → CoframeTable ───────────────────────────────────────────
   // `cfTable` is a plain `let` (not $state) so it is not tracked by $effects.
   // Each effect reads only the props it cares about; the first run is a no-op
-  // (cfTable is null until onMount resolves).
+  // (cfTable is null until the @attach promise resolves).
 
   $effect(() => {
     // Track `data` unconditionally before the null guard so Svelte registers
@@ -119,7 +98,7 @@
     cfTable?.updateColumns(_cols, selectable, filterMode);
   });
 
-  // ── Public API (bind:this → caller) ───────────────────────────────────────
+  // ── Public API (exposed to callers via bind:this) ─────────────────────────
 
   export function download(format: 'csv' | 'json', filename = `export.${format}`, options?: any, range?: string) {
     cfTable?.download(format, filename, options, range);
@@ -142,10 +121,43 @@
     return cfTable?.addRows(newRows) ?? 0;
   }
 
-  export function focusRowById(id: unknown) { cfTable?.focusRowById(id); }
+  export function focusRowById(id: unknown)                                    { cfTable?.focusRowById(id); }
+  export function getAdjacentRowId(id: unknown): unknown                       { return cfTable?.getAdjacentRowId(id) ?? null; }
+  export async function deleteRow(id: unknown): Promise<void>                  { return cfTable?.deleteRow(id); }
+  export function updateRow(id: unknown, data: Record<string, unknown>)        { cfTable?.updateRow(id, data); }
 </script>
 
-<div bind:this={container} class="cf-datatable" tabindex="-1"></div>
+<div
+  class="cf-datatable"
+  tabindex="-1"
+  {@attach (el) => {
+    // untrack: initial options captured once — reactive updates handled by $effects below.
+    // Avoids re-creating the table on every prop change.
+    const opts = untrack(() => ({
+      data, columns, selectable, filterMode, mode, pageSize, rowHeight,
+      initialSort, treeMode, treeChildField, treeStartExpanded,
+      onRowClick, onRowDblClick, onCellClick, onSelectionChange,
+      onDataLoaded, onFiltered, onSorted, onReady,
+      onNavAdd, onNavEdit, onNavDelete, onNavCommands,
+      onNavRefresh, onNavExport, onNavPrint, onNavCancel,
+    }));
+
+    let active = true;
+    CoframeTable.create(el, opts).then(table => {
+      if (!active) { table.destroy(); return; }
+      cfTable = table;
+      // Re-apply columns: inferred alignments/formatters may have arrived
+      // from DataView between create() start and resolve.
+      cfTable.updateColumns(opts.columns, opts.selectable, opts.filterMode);
+    });
+
+    return () => {
+      active = false;
+      cfTable?.destroy();
+      cfTable = null;
+    };
+  }}
+></div>
 
 <style>
   .cf-datatable {

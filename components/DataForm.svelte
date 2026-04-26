@@ -16,7 +16,7 @@
    *   onSave        fn                 called after save in mode 4 (no backend call)
    *   onCancel      fn                 called after cancel / discard
    */
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import type { Snippet } from 'svelte';
   import { Check, X, Loader } from 'lucide-svelte';
   import { getConfig } from '../config';
@@ -241,6 +241,8 @@
       }
     } finally {
       loading = false;
+      await tick();
+      focusFirstField();
     }
   }
 
@@ -355,12 +357,7 @@
 
   function advanceFocus(from: HTMLElement) {
     if (!fieldAreaEl) return;
-    const focusables = Array.from(
-      fieldAreaEl.querySelectorAll<HTMLElement>(
-        'input:not([disabled]):not([readonly]):not([type="hidden"]), ' +
-          'textarea:not([disabled]):not([readonly])'
-      )
-    );
+    const focusables = Array.from(fieldAreaEl.querySelectorAll<HTMLElement>(FOCUSABLE_SEL));
     const idx = focusables.indexOf(from);
     if (idx >= 0 && idx < focusables.length - 1) {
       focusables[idx + 1].focus();
@@ -371,30 +368,33 @@
 
   let fieldAreaEl: HTMLDivElement;
 
+  // Includes bits-ui DatePicker segments ([data-segment]) in addition to native inputs.
+  const FOCUSABLE_SEL =
+    'input:not([disabled]):not([readonly]):not([type="hidden"]), ' +
+    'textarea:not([disabled]):not([readonly]), ' +
+    '[data-segment]:not([data-segment="literal"])';
+
+  function focusFirstField() {
+    if (!isEditable || !fieldAreaEl) return;
+    const autofocusName = view.source?.autofocus;
+    if (autofocusName) {
+      const el = fieldAreaEl.querySelector<HTMLElement>(`[data-field="${autofocusName}"] ${FOCUSABLE_SEL}`);
+      el?.focus();
+    } else {
+      fieldAreaEl.querySelector<HTMLElement>(FOCUSABLE_SEL)?.focus();
+    }
+  }
+
   function focusFirstError() {
     if (!fieldAreaEl) return;
     const firstName = Object.keys(errors)[0];
     if (!firstName) return;
-    const el = fieldAreaEl.querySelector<HTMLElement>(
-      `[data-field="${firstName}"] input, [data-field="${firstName}"] textarea`
-    );
-    el?.focus();
+    fieldAreaEl.querySelector<HTMLElement>(`[data-field="${firstName}"] ${FOCUSABLE_SEL}`)?.focus();
   }
 
+  // Local mode: focus at mount. Async modes: focus after loadData() completes.
   onMount(() => {
-    if (!isEditable || !fieldAreaEl) return;
-    const autofocusName = view.source?.autofocus;
-    if (autofocusName) {
-      const el = fieldAreaEl.querySelector<HTMLElement>(
-        `[data-field="${autofocusName}"] input, [data-field="${autofocusName}"] textarea`
-      );
-      el?.focus();
-    } else {
-      const first = fieldAreaEl.querySelector<HTMLElement>(
-        'input:not([disabled]):not([readonly]):not([type="hidden"]), textarea:not([disabled]):not([readonly])'
-      );
-      first?.focus();
-    }
+    if (!isAsyncMode) focusFirstField();
   });
 
   // ── Toolbar layout (policy overrides global defaults) ─────────────────────

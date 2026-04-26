@@ -75,6 +75,9 @@
   export function download(format: 'csv' | 'json', filename: string)          { tableRef?.download(format, filename); }
   export async function addRows(newRows: any[]): Promise<number>               { return tableRef?.addRows(newRows) ?? 0; }
   export function focusRowById(id: unknown)                                    { tableRef?.focusRowById(id); }
+  export function getAdjacentRowId(id: unknown): unknown                       { return tableRef?.getAdjacentRowId(id) ?? null; }
+  export async function deleteRow(id: unknown): Promise<void>                  { return tableRef?.deleteRow(id); }
+  export function updateRow(id: unknown, data: Record<string, unknown>)        { tableRef?.updateRow(id, data); }
 </script>
 
 <DataTable

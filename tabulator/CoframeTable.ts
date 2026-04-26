@@ -415,6 +415,39 @@ export class CoframeTable {
     this.config.onRowClick?.(row.getData());
   }
 
+  /** Return the id of the next visible row (prev as fallback) for use before deletion. */
+  getAdjacentRowId(id: unknown): unknown {
+    const rows: any[] = this.table?.getRows('active') ?? [];
+    const idx = rows.findIndex((r: any) => r.getData()?.id === id);
+    if (idx === -1) return null;
+    if (idx + 1 < rows.length) return rows[idx + 1].getData()?.id ?? null;
+    if (idx - 1 >= 0) return rows[idx - 1].getData()?.id ?? null;
+    return null;
+  }
+
+  /** Remove a row by id and fire onDataLoaded with the new count. */
+  async deleteRow(id: unknown): Promise<void> {
+    const rows: any[] = this.table?.getRows() ?? [];
+    const row = rows.find((r: any) => r.getData()?.id === id);
+    if (!row) return;
+    if (this._activeRowId === id) {
+      this._activeRow = null;
+      this._activeRowId = null;
+    }
+    await row.delete();
+    const count: number = this.table.getDataCount();
+    this.config.onDataLoaded?.(count);
+  }
+
+  /** Update a single row's fields in place, preserving _meta. */
+  updateRow(id: unknown, data: Record<string, unknown>) {
+    const rows: any[] = this.table?.getRows() ?? [];
+    const row = rows.find((r: any) => r.getData()?.id === id);
+    if (!row) return;
+    const meta = row.getData()?._meta ?? {};
+    row.update({ _meta: meta, ...data });
+  }
+
   // ── Public API — column / data ─────────────────────────────────────────────
 
   /** Update column definitions and rebuild Tabulator columns. */

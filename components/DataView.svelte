@@ -446,10 +446,19 @@
       formId,
       recordId: recordId ?? null,
       title: label,
-      onSaved: () => {
-        // Remember which row to focus after reload
-        if (!isNew && recordId != null) _internalFocusId = recordId;
-        reloadData();
+      onSaved: (savedData: Record<string, unknown>) => {
+        if (isNew) {
+          const newId = savedData[pkField];
+          if (newId != null) _internalFocusId = newId;
+          tableRef?.addRows([savedData]);
+          if (totalCount !== null) totalCount++;
+        } else if (recordId != null) {
+          tableRef?.updateRow(recordId, savedData);
+          setTimeout(() => tableRef?.focusRowById(recordId), 0);
+        }
+      },
+      onCancel: () => {
+        if (recordId != null) queueMicrotask(() => tableRef?.focusRowById(recordId));
       },
     });
   }
@@ -480,11 +489,14 @@
     const model = view.source?.model as string | undefined;
     if (!model) return;
     try {
+      const adjacentId = tableRef?.getAdjacentRowId(id) ?? null;
       const res = await api.endpoint('db', { table: model, method: 'delete', id });
       if (res.status === 'success') {
-        _activeRowData = null;
         _internalFocusId = null;
-        reloadData();
+        _activeRowData = null;
+        await tableRef?.deleteRow(id);
+        if (totalCount !== null) totalCount--;
+        if (adjacentId != null) queueMicrotask(() => tableRef?.focusRowById(adjacentId));
       } else {
         alert(res.message ?? 'Errore durante l\'eliminazione');
       }
@@ -517,7 +529,10 @@
       saveViewState();
       const fid = _effectiveFocusId;
       if (fid != null) {
-        queueMicrotask(() => tableRef?.focusRowById(fid));
+        // setTimeout (not queueMicrotask): dataLoaded fires before tableBuilt, so
+        // cfTable is null at microtask time. A macrotask runs after all microtasks
+        // (including the .then that sets cfTable) have completed.
+        setTimeout(() => tableRef?.focusRowById(fid), 0);
       }
     }
   }
