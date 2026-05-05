@@ -2,9 +2,8 @@
   /**
    * WidgetFKCombobox.svelte — FK field widget with server-side search.
    *
-   * Shows a text input. On typing (debounced 300ms) searches the target table
-   * via LIKE on search_fields. Shows up to 10 matches plus a "Cerca altro…"
-   * button that pushes FKPickerView onto the stack.
+   * Keyboard: ↑↓ navigate options, Enter selects, Escape closes/restores,
+   * Tab closes. "Cerca altro…" is the last navigable item (opens picker).
    *
    * field.foreign_key: { target: string; field: string }  — from auto-form
    * serverConfig.tables[target].display_field             — label column
@@ -33,14 +32,21 @@
   let displayField = $derived(fkTarget ? serverConfig.tables[fkTarget]?.display_field : undefined);
   let searchFields = $derived(fkTarget ? (serverConfig.tables[fkTarget]?.search_fields ?? []) : []);
 
-  // Label for the currently selected value
   let currentLabel = $state(untrack(() => ''));
-  // Text shown in the input (user may be typing something different)
-  let query = $state(untrack(() => ''));
-  let options = $state<Array<{ id: unknown; label: string }>>([]);
-  let open = $state(false);
-  let searching = $state(false);
-  let inputEl = $state<HTMLInputElement | undefined>();
+  let query        = $state(untrack(() => ''));
+  let options      = $state<Array<{ id: unknown; label: string }>>([]);
+  let open         = $state(false);
+  let searching    = $state(false);
+  // -1 = none; 0..options.length-1 = option; options.length = "Cerca altro…"
+  let highlighted  = $state(-1);
+  let inputEl      = $state<HTMLInputElement | undefined>();
+  let listEl       = $state<HTMLUListElement | undefined>();
+
+  // Reset highlight when options list changes
+  $effect(() => {
+    void options;
+    highlighted = -1;
+  });
 
   // Load the label whenever value changes from outside
   $effect(() => {
@@ -48,7 +54,7 @@
     const df = displayField;
     if (v == null || v === '') {
       currentLabel = '';
-      query = untrack(() => query) === currentLabel ? '' : untrack(() => query);
+      query = '';
       return;
     }
     if (!fkTarget || !df) return;
@@ -126,6 +132,7 @@
     query = opt.label;
     options = [];
     open = false;
+    highlighted = -1;
     onchange(opt.id);
     onblur?.();
   }
@@ -135,14 +142,84 @@
     query = '';
     options = [];
     open = false;
+    highlighted = -1;
     onchange(null);
     onblur?.();
   }
 
+  // Total navigable items: options + "Cerca altro…"
+  function totalItems() { return options.length + 1; }
+
+  function scrollHighlightedIntoView() {
+    if (!listEl || highlighted < 0) return;
+    const items = listEl.querySelectorAll<HTMLElement>('[role="option"]');
+    items[highlighted]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      open = false;
+      highlighted = -1;
+      query = currentLabel;
+      onblur?.();
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      open = false;
+      highlighted = -1;
+      query = currentLabel;
+      // let Tab propagate for focus advance
+      return;
+    }
+
+    if (!open) {
+      // Open on ArrowDown/Up when closed
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (query.trim()) open = true;
+      }
+      // Enter on closed dropdown with no selection: dispatch df:enter for form focus advance
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        (e.currentTarget as HTMLElement).dispatchEvent(
+          new CustomEvent('df:enter', { bubbles: true })
+        );
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlighted = highlighted < totalItems() - 1 ? highlighted + 1 : 0;
+      scrollHighlightedIntoView();
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlighted = highlighted > 0 ? highlighted - 1 : totalItems() - 1;
+      scrollHighlightedIntoView();
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (highlighted === options.length) {
+        // "Cerca altro…" is highlighted
+        openPicker();
+      } else if (highlighted >= 0 && highlighted < options.length) {
+        selectOption(options[highlighted]);
+      }
+      return;
+    }
+  }
+
   function handleBlur() {
-    // Delay so mousedown on options fires before blur closes the dropdown
     setTimeout(() => {
       open = false;
+      highlighted = -1;
       query = currentLabel;
       onblur?.();
     }, 150);
@@ -178,7 +255,6 @@
 
 {:else}
   <div class="relative">
-    <!-- Input row -->
     <input
       bind:this={inputEl}
       type="text"
@@ -186,12 +262,13 @@
       placeholder={field.placeholder as string | undefined ?? 'Cerca…'}
       value={query}
       oninput={handleInput}
+      onkeydown={handleKeydown}
       onblur={handleBlur}
       aria-label={field.label ?? field.name}
       aria-autocomplete="list"
     />
 
-    <!-- Clear (×) button — shown when a value is selected -->
+    <!-- Clear (×) — shown when a value is selected -->
     {#if currentLabel}
       <button
         type="button"
@@ -227,18 +304,19 @@
         style="top: 100%; border: 1px solid var(--cf-border); background: var(--cf-surface)"
         onmousedown={(e) => e.preventDefault()}
       >
-        <ul class="max-h-48 overflow-auto py-1" role="listbox">
+        <ul bind:this={listEl} class="max-h-48 overflow-auto py-1" role="listbox">
           {#if searching}
             <li class="px-3 py-2 text-sm" style="color: var(--cf-text-subtle)">Ricerca…</li>
           {:else if options.length === 0 && query.trim()}
             <li class="px-3 py-2 text-sm" style="color: var(--cf-text-subtle)">Nessun risultato</li>
           {:else}
-            {#each options as opt (opt.id)}
+            {#each options as opt, i (opt.id)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <li
                 role="option"
                 aria-selected={String(value) === String(opt.id)}
-                class="cursor-pointer px-3 py-2 text-sm hover:bg-blue-50
+                class="cursor-pointer px-3 py-2 text-sm
+                       {highlighted === i ? 'bg-blue-50' : 'hover:bg-blue-50'}
                        {String(value) === String(opt.id) ? 'font-semibold text-brand' : ''}"
                 onclick={() => selectOption(opt)}
               >
@@ -248,16 +326,20 @@
           {/if}
         </ul>
 
-        <!-- Cerca altro… — always visible at the bottom -->
+        <!-- Cerca altro… -->
         <div style="border-top: 1px solid var(--cf-border-subtle, var(--cf-border))">
-          <button
-            type="button"
-            class="w-full px-3 py-2 text-left text-xs hover:bg-gray-50"
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <div
+            role="option"
+            aria-selected="false"
+            tabindex="-1"
+            class="cursor-pointer px-3 py-2 text-xs
+                   {highlighted === options.length ? 'bg-blue-50' : 'hover:bg-gray-50'}"
             style="color: var(--cf-text-subtle)"
             onclick={openPicker}
           >
             Cerca altro…
-          </button>
+          </div>
         </div>
       </div>
     {/if}

@@ -1,7 +1,12 @@
 <script lang="ts">
   import { beforeNavigate } from '$app/navigation';
+  import { setContext } from 'svelte';
   import { stack } from './stack.svelte';
   import { fly } from 'svelte/transition';
+
+  // Signal to descendants (e.g. nested DataView) that they are inside a stack page.
+  // This prevents inner DataViews from creating their own redundant StackContainer overlay.
+  setContext('cf:inStack', true);
 
   interface Props {
     onExit?: () => void;

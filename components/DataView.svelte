@@ -15,7 +15,7 @@
    *   data     any[]                     static data (source: prop)
    *   onEvent  (name, data) => void      unified event emitter (row_click, data_load, …)
    */
-  import { untrack } from 'svelte';
+  import { untrack, getContext } from 'svelte';
   import DataViewNavigator from './DataViewNavigator.svelte';
   import DataViewTable from './DataViewTable.svelte';
   import DataFormView from './DataFormView.svelte';
@@ -149,6 +149,10 @@
   const treeStartExpanded = $derived(view.tree?.start_expanded ?? false);
 
   // ── Navigator ──────────────────────────────────────────────────────────────
+
+  // When DataView is rendered inside a StackContainer (e.g. as a stack page),
+  // it must not create its own StackContainer overlay — the outer one handles all pages.
+  const insideStack = getContext<boolean>('cf:inStack') ?? false;
 
   // navigator: true (default) | false | NavigatorConfig object
   const showNavigator = $derived(view.navigator !== false);
@@ -472,6 +476,14 @@
     loadData();
   }
 
+  function handleNavAccept() {
+    if (_activeRowData) onEvent?.('row_accept', _activeRowData);
+  }
+
+  function handleNavLookupCancel() {
+    onEvent?.('row_cancel', null);
+  }
+
   function handleNavAdd() {
     openForm(null, true);
   }
@@ -569,6 +581,8 @@
       {totalCount}
       {selectedCount}
       activeRowId={_activeRowData ? (_activeRowData as any)[pkField] : null}
+      onAccept={handleNavAccept}
+      onCancel={handleNavLookupCancel}
       onAdd={handleNavAdd}
       onEdit={handleNavEdit}
       onDelete={handleNavDelete}
@@ -637,8 +651,8 @@
     {/if}
   </div>
 
-  <!-- ── Stack overlay (forms open on top when navigator is active) ─────── -->
-  {#if showNavigator && $stack.length > 0}
+  <!-- ── Stack overlay — only when we own the stack (not when inside another StackContainer) -->
+  {#if showNavigator && !insideStack && $stack.length > 0}
     <div class="cf-dv-stack-overlay">
       <StackContainer />
     </div>

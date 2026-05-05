@@ -2,9 +2,9 @@
   /**
    * FKPickerView.svelte — stack page for FK field selection.
    *
-   * Pushed onto the stack by WidgetFKCombobox when the user clicks "Cerca altro…".
-   * Builds columns from serverConfig, shows DataView in read-only mode.
-   * On row double-click, pops the stack with the selected row.
+   * Full DataView in 'lookup' mode: add/edit/delete work normally.
+   * Selection gestures (double-click, Enter, Accept ✓) pop the stack
+   * with the selected row. Cancel (×) or ← pop with null.
    */
   import { stack } from '$coframe/stack/stack.svelte';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
@@ -31,11 +31,15 @@
     type: 'table',
     source: { model: table },
     columns: columns.length > 0 ? columns : undefined,
-    navigator: false,
+    navigator: { mode: 'lookup' },
   });
 
   function handleEvent(name: string, data: unknown) {
-    if (name === 'row_dblclick') stack.pop(data);
+    if (name === 'row_dblclick' || name === 'row_accept') {
+      stack.pop(data);
+    } else if (name === 'row_cancel') {
+      stack.pop(null);
+    }
   }
 </script>
 
@@ -50,9 +54,6 @@
     {#if title}
       <h2 class="cf-form-view-title">{title}</h2>
     {/if}
-    <span class="ml-auto text-xs" style="color: var(--cf-text-subtle)">
-      Doppio click per selezionare
-    </span>
   </div>
   <div class="cf-form-view-body">
     <DataView view={viewDescriptor} onEvent={handleEvent} />
