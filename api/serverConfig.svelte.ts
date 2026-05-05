@@ -86,6 +86,7 @@ export interface TableColumnInfo {
   editable?: boolean;
   nullable?: boolean;
   secret?: boolean;
+  foreign_key?: { target: string; field: string };
   [key: string]: unknown;
 }
 
@@ -94,6 +95,10 @@ export interface TableInfo {
   pk_fields: string[];
   columns: TableColumnInfo[];
   mixins?: string[];
+  /** Column to show as label in FK comboboxes (resolved server-side). */
+  display_field?: string;
+  /** Real columns used for SQL LIKE search in FK comboboxes. */
+  search_fields?: string[];
 }
 
 export type TableRegistry = Record<string, TableInfo>;

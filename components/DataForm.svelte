@@ -27,6 +27,7 @@
   import WidgetDate from './widgets/WidgetDate.svelte';
   import WidgetBoolean from './widgets/WidgetBoolean.svelte';
   import WidgetCombobox from './widgets/WidgetCombobox.svelte';
+  import WidgetFKCombobox from './widgets/WidgetFKCombobox.svelte';
   import type { FormDescriptor, FormField, FormStatus } from './dataform.types';
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -138,6 +139,7 @@
 
   function resolveWidget(field: FormField): string {
     if (field.widget) return field.widget as string;
+    if (field.foreign_key) return 'fk';
     const t = (field.type ?? '').toLowerCase();
     if (t === 'bool' || t === 'boolean') return 'boolean';
     if (t === 'date') return 'date';
@@ -655,6 +657,14 @@
       </div>
     {:else if widgetType === 'combobox'}
       <WidgetCombobox
+        value={draft[field.name]}
+        onchange={(v) => patch(field.name, v)}
+        onblur={() => validateField(field.name)}
+        readonly={fieldReadonly}
+        {field}
+      />
+    {:else if widgetType === 'fk'}
+      <WidgetFKCombobox
         value={draft[field.name]}
         onchange={(v) => patch(field.name, v)}
         onblur={() => validateField(field.name)}
