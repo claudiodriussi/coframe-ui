@@ -23,7 +23,7 @@ type StackPage = {
   onReturn?: (data?: unknown) => void;
 };
 
-function createStack() {
+export function createStack() {
   const { subscribe, update } = writable<StackPage[]>([]);
 
   return {
@@ -62,3 +62,4 @@ function createStack() {
 }
 
 export const stack = createStack();
+export type StackInstance = ReturnType<typeof createStack>;

@@ -24,7 +24,8 @@
   import { api } from '$coframe/api/client';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
   import { resolveFormatter } from '$coframe/formatters/registry';
-  import { stack } from '$coframe/stack/stack.svelte';
+  import { createStack } from '$coframe/stack/stack.svelte';
+  import type { StackInstance } from '$coframe/stack/stack.svelte';
   import {
     extractFieldKey,
     applyTriggerVars,
@@ -148,11 +149,13 @@
   const treeChildField = $derived(view.tree?.child_field ?? 'children');
   const treeStartExpanded = $derived(view.tree?.start_expanded ?? false);
 
-  // ── Navigator ──────────────────────────────────────────────────────────────
+  // ── Stack ──────────────────────────────────────────────────────────────────
 
-  // When DataView is rendered inside a StackContainer (e.g. as a stack page),
-  // it must not create its own StackContainer overlay — the outer one handles all pages.
-  const insideStack = getContext<boolean>('cf:inStack') ?? false;
+  // If a parent StackContainer already injected a stack via context, reuse it.
+  // Otherwise (root DataView) create a fresh local stack and host the StackContainer.
+  const _ctxStack = getContext<StackInstance | undefined>('cf:stack');
+  const localStack: StackInstance = _ctxStack ?? createStack();
+  const isRootView = !_ctxStack;  // only root DataViews render their own StackContainer
 
   // navigator: true (default) | false | NavigatorConfig object
   const showNavigator = $derived(view.navigator !== false);
@@ -446,7 +449,7 @@
     if (!formId) return;
     const model = (view.source?.model as string | undefined) ?? '';
     const label = isNew ? `Nuovo ${model}` : `Modifica ${model}`;
-    stack.push(DataFormView, {
+    localStack.push(DataFormView, {
       formId,
       recordId: recordId ?? null,
       title: label,
@@ -651,10 +654,10 @@
     {/if}
   </div>
 
-  <!-- ── Stack overlay — only when we own the stack (not when inside another StackContainer) -->
-  {#if showNavigator && !insideStack && $stack.length > 0}
+  <!-- ── Stack overlay — only root DataViews host a StackContainer (inner ones share the root's) -->
+  {#if showNavigator && isRootView && $localStack.length > 0}
     <div class="cf-dv-stack-overlay">
-      <StackContainer />
+      <StackContainer stack={localStack} />
     </div>
   {/if}
 

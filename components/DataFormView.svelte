@@ -11,10 +11,14 @@
    *   title       string              shown in header bar
    *   onSaved     (savedData) => void  called after successful save with merged record (before pop)
    */
-  import { stack } from '$coframe/stack/stack.svelte';
+  import { getContext } from 'svelte';
+  import { stack as globalStack } from '$coframe/stack/stack.svelte';
+  import type { StackInstance } from '$coframe/stack/stack.svelte';
   import { api } from '$coframe/api/client';
   import DataForm from './DataForm.svelte';
   import type { FormDescriptor } from './dataform.types';
+
+  const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
 
   let {
     formId,

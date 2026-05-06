@@ -6,10 +6,14 @@
    * Selection gestures (double-click, Enter, Accept ✓) pop the stack
    * with the selected row. Cancel (×) or ← pop with null.
    */
-  import { stack } from '$coframe/stack/stack.svelte';
+  import { getContext } from 'svelte';
+  import { stack as globalStack } from '$coframe/stack/stack.svelte';
+  import type { StackInstance } from '$coframe/stack/stack.svelte';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
   import DataView from './DataView.svelte';
   import type { ViewDescriptor } from './dataview.types';
+
+  const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
 
   interface Props {
     table: string;

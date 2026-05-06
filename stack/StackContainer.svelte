@@ -1,18 +1,20 @@
 <script lang="ts">
   import { beforeNavigate } from '$app/navigation';
-  import { setContext } from 'svelte';
-  import { stack } from './stack.svelte';
+  import { setContext, untrack } from 'svelte';
+  import { stack as globalStack } from './stack.svelte';
+  import type { StackInstance } from './stack.svelte';
   import { fly } from 'svelte/transition';
 
-  // Signal to descendants (e.g. nested DataView) that they are inside a stack page.
-  // This prevents inner DataViews from creating their own redundant StackContainer overlay.
-  setContext('cf:inStack', true);
-
   interface Props {
+    stack?: StackInstance;
     onExit?: () => void;
   }
 
-  let { onExit }: Props = $props();
+  let { stack = globalStack, onExit }: Props = $props();
+
+  // The stack instance is stable (never replaced, only its internal state changes).
+  // untrack: tell Svelte we intentionally capture the initial prop value here.
+  setContext('cf:stack', untrack(() => stack));
 
   // Pop on browser Back whenever the stack has pages; let SvelteKit navigate when empty.
   beforeNavigate(({ type, cancel }) => {

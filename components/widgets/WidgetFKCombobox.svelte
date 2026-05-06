@@ -9,12 +9,15 @@
    * serverConfig.tables[target].display_field             — label column
    * serverConfig.tables[target].search_fields             — searchable columns
    */
-  import { untrack } from 'svelte';
+  import { untrack, getContext } from 'svelte';
   import { api } from '$coframe/api/client';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
-  import { stack } from '$coframe/stack/stack.svelte';
+  import { stack as globalStack } from '$coframe/stack/stack.svelte';
+  import type { StackInstance } from '$coframe/stack/stack.svelte';
   import FKPickerView from '../FKPickerView.svelte';
   import type { FormField } from '../dataform.types';
+
+  const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
 
   interface Props {
     value: unknown;
@@ -52,23 +55,26 @@
   $effect(() => {
     const v = value;
     const df = displayField;
+    const tbl = fkTarget;
+    const pk = fkPkField;
     if (v == null || v === '') {
       currentLabel = '';
       query = '';
       return;
     }
-    if (!fkTarget || !df) return;
-    _loadLabel(v, df);
+    if (!tbl || !df) return;
+    _loadLabel(v, tbl, pk, df);
   });
 
-  async function _loadLabel(v: unknown, df: string) {
+  // All parameters explicit — no outer-scope $derived access inside async body.
+  async function _loadLabel(v: unknown, table: string, pkField: string, df: string) {
     try {
       const res = await api.endpoint('query', {
         format: 'records',
         query: {
-          table: fkTarget,
-          columns: [fkPkField, df],
-          filters: { conditions: { column: fkPkField, op: 'eq', value: v } },
+          table,
+          columns: [pkField, df],
+          filters: { conditions: { column: pkField, op: 'eq', value: v } },
           limit: 1,
         },
       });
@@ -228,18 +234,24 @@
   function openPicker() {
     open = false;
     if (!fkTarget) return;
+    // Snapshot derived values at push time — closures must not access $derived inside async.
+    const _table   = fkTarget;
+    const _pkField = fkPkField;
+    const _df      = displayField;
     stack.push(
       FKPickerView,
-      { table: fkTarget, title: `Seleziona ${field.label ?? fkTarget}` },
+      { table: _table, title: `Seleziona ${field.label ?? _table}` },
       (row: unknown) => {
         if (!row || typeof row !== 'object') return;
         const r = row as Record<string, unknown>;
-        const id = r[fkPkField];
-        const df = displayField;
-        const label = df ? String(r[df] ?? '') : String(id ?? '');
-        currentLabel = label;
-        query = label;
+        const id = r[_pkField];
+        if (id == null) return;
+        // Show id immediately so the field is never visually empty on return.
+        currentLabel = String(id);
+        query = String(id);
         onchange(id);
+        // Then replace with the real label (row may lack virtual display fields).
+        if (_df) _loadLabel(id, _table, _pkField, _df);
       }
     );
   }
