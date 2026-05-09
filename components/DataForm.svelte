@@ -80,6 +80,14 @@
 
   // ── Internal state ─────────────────────────────────────────────────────────
 
+  // Guard for the loadData $effect — plain (non-reactive) vars to detect genuine changes.
+  // Svelte 5 sometimes re-runs $effects when parent components re-render even with
+  // same prop values (e.g. via spread props in a keyed #each). This guard prevents
+  // spurious loadData() calls when trigger/recordId haven't actually changed.
+  let _seenTrigger: typeof trigger = undefined as any;
+  let _seenRecordId: typeof recordId = undefined as any;
+  let _neverLoaded = true;
+
   // Local mode (Step A): capture data at mount via untrack.
   // Async modes (B/C): start empty — loadData() fills original/draft.
   let original = $state<Record<string, unknown>>(
@@ -248,14 +256,21 @@
     }
   }
 
-  // Reload when trigger or recordId changes (track all unconditionally)
+  // Reload when trigger or recordId genuinely changes.
+  // - untrack(loadData): prevents accidental tracking of view.source etc.
+  // - plain-var guard: prevents spurious re-runs when Svelte 5 re-sets props to same value
+  //   (happens when parent StackContainer re-renders via spread {…page.props})
   $effect(() => {
-    const _trigger = trigger;   // track incondizionale
-    const _rid = recordId;      // track incondizionale
+    const _trigger = trigger;   // track trigger
+    const _rid = recordId;      // track recordId
     void _rid;
     if (!isAsyncMode) return;
     if (hasTriggerDeps && _trigger === undefined) return;
-    loadData();
+    if (!_neverLoaded && _trigger === _seenTrigger && _rid === _seenRecordId) return;
+    _seenTrigger = _trigger;
+    _seenRecordId = _rid;
+    _neverLoaded = false;
+    untrack(() => loadData());
   });
 
   // ── Save / Cancel ──────────────────────────────────────────────────────────

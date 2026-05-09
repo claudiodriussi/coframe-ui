@@ -19,12 +19,11 @@
   import DataViewNavigator from './DataViewNavigator.svelte';
   import DataViewTable from './DataViewTable.svelte';
   import DataFormView from './DataFormView.svelte';
-  import StackContainer from '$coframe/stack/StackContainer.svelte';
   import type { ColumnDef } from '$coframe/tabulator/CoframeTable';
   import { api } from '$coframe/api/client';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
   import { resolveFormatter } from '$coframe/formatters/registry';
-  import { createStack } from '$coframe/stack/stack.svelte';
+  import { stack as globalStack } from '$coframe/stack/stack.svelte';
   import type { StackInstance } from '$coframe/stack/stack.svelte';
   import {
     extractFieldKey,
@@ -151,11 +150,9 @@
 
   // ── Stack ──────────────────────────────────────────────────────────────────
 
-  // If a parent StackContainer already injected a stack via context, reuse it.
-  // Otherwise (root DataView) create a fresh local stack and host the StackContainer.
-  const _ctxStack = getContext<StackInstance | undefined>('cf:stack');
-  const localStack: StackInstance = _ctxStack ?? createStack();
-  const isRootView = !_ctxStack;  // only root DataViews render their own StackContainer
+  // Stack is provided by the parent Panel via context.
+  // Falls back to the global singleton only when DataView is used outside a Panel.
+  const stack: StackInstance = getContext<StackInstance>('cf:stack') ?? globalStack;
 
   // navigator: true (default) | false | NavigatorConfig object
   const showNavigator = $derived(view.navigator !== false);
@@ -425,6 +422,13 @@
 
   $effect(() => { loadData(); });
 
+  // Clear active row selection when trigger changes (e.g. parent row switches).
+  // Without this, edit/delete buttons stay enabled for the previously selected row.
+  $effect(() => {
+    void trigger;
+    _activeRowData = null;
+  });
+
   // ── Toolbar / export actions ───────────────────────────────────────────────
 
   function handleExport() {
@@ -449,7 +453,7 @@
     if (!formId) return;
     const model = (view.source?.model as string | undefined) ?? '';
     const label = isNew ? `Nuovo ${model}` : `Modifica ${model}`;
-    localStack.push(DataFormView, {
+    stack.push(DataFormView, {
       formId,
       recordId: recordId ?? null,
       title: label,
@@ -654,12 +658,6 @@
     {/if}
   </div>
 
-  <!-- ── Stack overlay — only root DataViews host a StackContainer (inner ones share the root's) -->
-  {#if showNavigator && isRootView && $localStack.length > 0}
-    <div class="cf-dv-stack-overlay">
-      <StackContainer stack={localStack} />
-    </div>
-  {/if}
 
 </div>
 
@@ -746,10 +744,4 @@
     text-align: center;
   }
 
-  /* ── Stack overlay — covers the entire DataView for form pages ───────── */
-  .cf-dv-stack-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 10;
-  }
 </style>

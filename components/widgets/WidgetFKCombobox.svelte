@@ -284,6 +284,7 @@
     {#if currentLabel}
       <button
         type="button"
+        tabindex="-1"
         class="absolute right-8 top-1/2 -translate-y-1/2 p-1"
         style="color: var(--cf-text-subtle)"
         onmousedown={(e) => { e.preventDefault(); clearValue(); }}
@@ -300,7 +301,8 @@
       type="button"
       class="absolute right-2 top-1/2 -translate-y-1/2 p-1"
       style="color: var(--cf-text-subtle)"
-      onmousedown={(e) => { e.preventDefault(); open = !open; if (open) inputEl?.focus(); }}
+      onmousedown={(e) => e.preventDefault()}
+      onclick={() => { open = !open; if (open) inputEl?.focus(); }}
       aria-label="Apri lista"
     >
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
