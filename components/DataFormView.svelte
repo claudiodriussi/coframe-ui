@@ -23,12 +23,14 @@
   let {
     formId,
     recordId = null,
+    data = undefined,
     title = '',
     onSaved,
     onCancel,
   }: {
     formId: string;
     recordId?: string | number | null;
+    data?: Record<string, unknown>;       // Step A: computed row, no DB
     title?: string;
     onSaved?: (savedData: Record<string, unknown>) => void;
     onCancel?: () => void;
@@ -98,6 +100,7 @@
       <DataForm
         view={descriptor}
         {recordId}
+        data={data}
         onSave={handleSave}
         onCancel={handleCancel}
       />

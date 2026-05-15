@@ -85,13 +85,74 @@ export interface FormPolicy {
   button_style?: 'label' | 'icon' | 'icon-label';
 }
 
+// ── Layout engine node types ───────────────────────────────────────────────
+
+/** A field inside a column — width can be '30%', '80px', or omitted (fills remaining). */
+export interface SectionField extends FormField {
+  width?: string;
+}
+
+/** Zero-height flex item that forces the next field to a new row. YAML: `- filler:` */
+export interface FillerField {
+  filler: null;
+}
+
+export interface ColumnDef {
+  fields: (SectionField | FillerField)[];
+}
+
+export interface SectionNode {
+  type: 'section';
+  id?: string;
+  label?: string;
+  border?: boolean;
+  /** number → legacy uniform grid; ColumnDef[] → explicit column-first layout */
+  columns?: number | ColumnDef[];
+}
+
+export interface HrNode {
+  type: 'hr';
+}
+
+export interface LabelNode {
+  type: 'label';
+  text: string;
+  style?: 'heading' | 'subheading' | 'normal';
+}
+
+export interface TabPage {
+  label: string;
+  layout: LayoutNode[];
+}
+
+export interface TabsNode {
+  type: 'tabs';
+  id?: string;
+  pages: TabPage[];
+}
+
+export interface ColNode {
+  type: 'col';
+  weight?: number;
+  layout: LayoutNode[];
+}
+
+export interface RowNode {
+  type: 'row';
+  id?: string;
+  children: ColNode[];
+}
+
+export type LayoutNode = FormField | SectionNode | HrNode | LabelNode | TabsNode | RowNode;
+
 // ── Top-level descriptor ────────────────────────────────────────────────────
 
 export interface FormDescriptor {
   type: 'form';
   title?: string;
   source?: FormSource;
-  fields?: FormFieldEntry[];
+  fields?: FormFieldEntry[];   // legacy flat list (backward compat)
+  layout?: LayoutNode[];       // new layout engine — takes precedence over fields
   actions?: FormActions;
   policy?: FormPolicy;
   [key: string]: unknown;

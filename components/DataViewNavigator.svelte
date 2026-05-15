@@ -84,6 +84,7 @@
   const MODE_DEFAULTS: Record<string, Set<string>> = {
     browser:  new Set(['add', 'edit', 'delete', 'select', 'filter', 'export']),
     lookup:   new Set(['add', 'edit', 'delete', 'accept', 'cancel', 'filter']),
+    batch:    new Set(['edit', 'accept', 'cancel', 'select', 'filter']),
     readonly: new Set(['filter', 'export']),
   };
 
@@ -143,7 +144,8 @@
     {/if}
 
     {#if isVisible('accept')}
-      <button class="cf-nav-btn cf-nav-btn-primary" title="Accetta (Enter)" disabled={!hasRow} onclick={onAccept}>
+      {@const acceptDisabled = mode === 'batch' ? false : !hasRow}
+      <button class="cf-nav-btn cf-nav-btn-primary" title="Accetta (Enter)" disabled={acceptDisabled} onclick={onAccept}>
         <Check size={14} />
       </button>
     {/if}

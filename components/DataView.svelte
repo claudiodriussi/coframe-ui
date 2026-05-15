@@ -452,6 +452,28 @@
   function openForm(recordId: unknown, isNew: boolean) {
     if (!formId) return;
     const model = (view.source?.model as string | undefined) ?? '';
+
+    // Batch mode: computed rows — pass data directly, no DB roundtrip
+    if (navigatorMode === 'batch' && _activeRowData) {
+      const rowSnapshot = { ..._activeRowData };
+      const rowId = rowSnapshot[pkField];
+      stack.push(DataFormView, {
+        formId,
+        data: rowSnapshot,
+        title: 'Modifica',
+        onSaved: (savedData: Record<string, unknown>) => {
+          const merged = { ...rowSnapshot, ...savedData };
+          const idx = (rows as Record<string, unknown>[]).findIndex((r) => r[pkField] === rowId);
+          if (idx >= 0) (rows as Record<string, unknown>[])[idx] = merged;
+          tableRef?.updateRow(rowId, merged);
+          queueMicrotask(() => tableRef?.focusRowById(rowId));
+        },
+        onCancel: () => { queueMicrotask(() => tableRef?.focusRowById(rowId)); },
+      });
+      return;
+    }
+
+    // Normal DB-backed form
     const label = isNew ? `Nuovo ${model}` : `Modifica ${model}`;
     stack.push(DataFormView, {
       formId,
@@ -484,7 +506,24 @@
   }
 
   function handleNavAccept() {
-    if (_activeRowData) onEvent?.('row_accept', _activeRowData);
+    if (navigatorMode === 'batch') {
+      // Batch mode: emit all rows + selected subset.
+      // For DB models emit only PKs; for computed arrays emit full row objects.
+      const selectedRows = (tableRef?.getSelectedData() ?? []) as Record<string, unknown>[];
+      const hasModel = !!view.source?.model;
+      const payload = hasModel
+        ? {
+            selected_ids: selectedRows.map((r) => r[pkField]),
+            total_rows:   rows.length,
+          }
+        : {
+            rows,
+            selected:     selectedRows.length > 0 ? selectedRows : (rows as Record<string, unknown>[]),
+          };
+      onEvent?.('batch_accept', payload);
+    } else {
+      if (_activeRowData) onEvent?.('row_accept', _activeRowData);
+    }
   }
 
   function handleNavLookupCancel() {
@@ -528,12 +567,12 @@
   function handleRowDblClick(row: unknown) {
     const rowData = row as Record<string, unknown>;
     _activeRowData = rowData;
-    if (showNavigator && navigatorMode === 'browser' && formId) {
+    if (showNavigator && (navigatorMode === 'browser' || navigatorMode === 'batch') && formId) {
       // Navigator owns the action — open form directly
       const id = rowData[pkField];
       openForm(id, false);
     } else {
-      // No navigator — emit event for parent to handle
+      // No navigator or lookup mode — emit event for parent to handle
       onEvent?.('row_dblclick', row);
     }
   }

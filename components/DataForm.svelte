@@ -28,7 +28,11 @@
   import WidgetBoolean from './widgets/WidgetBoolean.svelte';
   import WidgetCombobox from './widgets/WidgetCombobox.svelte';
   import WidgetFKCombobox from './widgets/WidgetFKCombobox.svelte';
-  import type { FormDescriptor, FormField, FormStatus } from './dataform.types';
+  import type {
+    FormDescriptor, FormField, FormStatus,
+    LayoutNode, SectionNode, SectionField, FillerField, ColumnDef,
+    LabelNode, TabsNode, RowNode,
+  } from './dataform.types';
 
   // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +59,40 @@
     onSave,
     onCancel
   }: Props = $props();
+
+  // ── Layout engine helpers ──────────────────────────────────────────────────
+
+  // Active tab index per tabs node (keyed by node.id or page labels joined).
+  let tabStates = $state<Record<string, number>>({});
+
+  // Recursively extract all FormFields from a layout tree (for validation + save).
+  function extractLayoutFields(nodes: LayoutNode[]): FormField[] {
+    const result: FormField[] = [];
+    for (const node of nodes) {
+      if ('name' in node) {
+        result.push(node as FormField);
+      } else if (node.type === 'section') {
+        const sec = node as SectionNode;
+        if (Array.isArray(sec.columns)) {
+          for (const col of sec.columns as ColumnDef[]) {
+            result.push(...col.fields.filter((f): f is SectionField => 'name' in f));
+          }
+        } else {
+          result.push(...((sec as any).fields ?? []).filter((f: any) => 'name' in f));
+        }
+      } else if (node.type === 'row') {
+        for (const col of (node as RowNode).children) {
+          result.push(...extractLayoutFields(col.layout));
+        }
+      } else if (node.type === 'tabs') {
+        for (const page of (node as TabsNode).pages) {
+          result.push(...extractLayoutFields(page.layout));
+        }
+      }
+      // hr, label, filler: no fields
+    }
+    return result;
+  }
 
   // ── Mode detection (static — source config fixed at mount) ─────────────────
   // untrack: intentional — view.source is fixed at mount, not reactive.
@@ -106,8 +144,12 @@
   let policy = $derived(view.policy ?? {});
   let isEditable = $derived(policy.editable === true);
 
-  // Flat fields only (group: are Phase 2 — filtered out here)
-  let flatFields = $derived((view.fields ?? []).filter((f): f is FormField => 'name' in f));
+  // All leaf FormFields — from layout tree or legacy flat list.
+  let flatFields = $derived(
+    view.layout
+      ? extractLayoutFields(view.layout as LayoutNode[])
+      : (view.fields ?? []).filter((f): f is FormField => 'name' in f)
+  );
 
   // Group fields by same_row: a field with same_row:true joins the previous group.
   let fieldGroups = $derived(groupFields(flatFields));
@@ -480,6 +522,9 @@
         <span class="text-sm">Caricamento…</span>
       </div>
 
+    {:else if view.layout}
+      {@render renderLayout(view.layout as LayoutNode[])}
+
     {:else}
       {#if fieldGroups.length === 0}
         <p class="text-sm" style="color: var(--cf-text-subtle)">
@@ -703,4 +748,141 @@
   {:else if field.help}
     <p class="mt-1 text-xs text-gray-500">{field.help as string}</p>
   {/if}
+{/snippet}
+
+<!-- ── Layout engine snippets ─────────────────────────────────────────────── -->
+
+{#snippet renderLayout(nodes: LayoutNode[])}
+  {#each nodes as node}
+    {#if 'name' in node}
+      <div class="mb-4" data-field={(node as FormField).name}>
+        {@render fieldContent(node as FormField)}
+      </div>
+    {:else if node.type === 'section'}
+      {@render sectionNode(node as SectionNode)}
+    {:else if node.type === 'hr'}
+      <hr class="my-4" style="border-color: var(--cf-border)" />
+    {:else if node.type === 'label'}
+      {@render labelNode(node as LabelNode)}
+    {:else if node.type === 'tabs'}
+      {@render tabsNode(node as TabsNode)}
+    {:else if node.type === 'row'}
+      {@render rowNode(node as RowNode)}
+    {/if}
+  {/each}
+{/snippet}
+
+{#snippet columnFields(fields: (SectionField | FillerField)[])}
+  <div class="flex flex-wrap gap-x-4">
+    {#each fields as item}
+      {#if 'filler' in item}
+        <div style="flex: 0 0 100%; height: 0"></div>
+      {:else}
+        {@const f = item as SectionField}
+        <div
+          class="mb-4 min-w-0"
+          style={f.width ? `flex: 0 0 ${f.width}` : 'flex: 1 1 0'}
+          data-field={f.name}
+        >
+          {@render fieldContent(f)}
+        </div>
+      {/if}
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet sectionGrid(node: SectionNode)}
+  {#if Array.isArray(node.columns)}
+    {@const colDefs = node.columns as ColumnDef[]}
+    <div class="flex gap-6" style="flex-wrap: wrap">
+      {#each colDefs as col}
+        <div style="flex: 1 1 var(--cf-form-col-min, 15rem); min-width: 0">
+          {@render columnFields(col.fields)}
+        </div>
+      {/each}
+    </div>
+  {:else}
+    {@const cols = (node.columns as number | undefined) ?? 1}
+    <div
+      class="grid gap-x-4 gap-y-0"
+      style={cols === 1
+        ? 'grid-template-columns: 1fr'
+        : `grid-template-columns: repeat(auto-fit, minmax(max(calc(100% / ${cols} - 1rem), var(--cf-form-col-min, 15rem)), 1fr))`}
+    >
+      {#each ((node as any).fields ?? []) as field (field.name)}
+        <div class="mb-4" data-field={field.name}>
+          {@render fieldContent(field as FormField)}
+        </div>
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet sectionNode(node: SectionNode)}
+  {#if node.border}
+    <fieldset
+      class="mb-4 rounded px-4 pb-2 pt-1"
+      style="border: 1px solid var(--cf-border)"
+    >
+      {#if node.label}
+        <legend class="px-2 text-sm font-semibold" style="color: var(--cf-text)">
+          {node.label}
+        </legend>
+      {/if}
+      {@render sectionGrid(node)}
+    </fieldset>
+  {:else}
+    <div class="mb-2">
+      {#if node.label}
+        <p class="mb-2 text-sm font-semibold" style="color: var(--cf-text)">{node.label}</p>
+      {/if}
+      {@render sectionGrid(node)}
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet labelNode(node: LabelNode)}
+  {#if node.style === 'heading'}
+    <h3 class="mb-3 mt-1 text-base font-semibold" style="color: var(--cf-text)">{node.text}</h3>
+  {:else if node.style === 'subheading'}
+    <h4 class="mb-2 mt-1 text-sm font-semibold" style="color: var(--cf-text)">{node.text}</h4>
+  {:else}
+    <p class="mb-2 text-sm" style="color: var(--cf-text-subtle)">{node.text}</p>
+  {/if}
+{/snippet}
+
+{#snippet tabsNode(node: TabsNode)}
+  {@const tabKey = node.id ?? node.pages.map((p) => p.label).join('|')}
+  {@const activeIdx = tabStates[tabKey] ?? 0}
+  <div class="mb-4">
+    <div class="flex border-b" style="border-color: var(--cf-border)">
+      {#each node.pages as page, i}
+        <button
+          type="button"
+          class="-mb-px border-b-2 px-4 py-2 text-sm transition-colors"
+          style={i === activeIdx
+            ? 'border-color: var(--cf-brand, #3b82f6); color: var(--cf-brand, #3b82f6); font-weight: 500'
+            : 'border-color: transparent; color: var(--cf-text-subtle)'}
+          onclick={() => { tabStates[tabKey] = i; }}
+        >
+          {page.label}
+        </button>
+      {/each}
+    </div>
+    {#each node.pages as page, i}
+      <div class={i === activeIdx ? 'pt-4' : 'hidden'}>
+        {@render renderLayout(page.layout)}
+      </div>
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet rowNode(node: RowNode)}
+  <div class="mb-4 flex gap-4">
+    {#each node.children as col}
+      <div style="flex: {col.weight ?? 1} 1 0; min-width: 0">
+        {@render renderLayout(col.layout)}
+      </div>
+    {/each}
+  </div>
 {/snippet}
