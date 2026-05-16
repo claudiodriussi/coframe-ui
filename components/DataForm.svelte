@@ -28,6 +28,7 @@
   import WidgetBoolean from './widgets/WidgetBoolean.svelte';
   import WidgetCombobox from './widgets/WidgetCombobox.svelte';
   import WidgetFKCombobox from './widgets/WidgetFKCombobox.svelte';
+  import { _ } from '../i18n';
   import type {
     FormDescriptor, FormField, FormStatus,
     LayoutNode, SectionNode, SectionField, FillerField, ColumnDef,
@@ -215,13 +216,13 @@
     const isEmpty = value === null || value === undefined || value === '';
 
     if (field.required && isEmpty) {
-      errors[name] = `${field.label ?? field.name} è obbligatorio`;
+      errors[name] = `${field.label ?? field.name} ${_('is required')}`;
       return false;
     }
 
     const wt = resolveWidget(field);
     if (wt === 'number' && !isEmpty && isNaN(Number(value))) {
-      errors[name] = 'Valore numerico non valido';
+      errors[name] = _('Invalid numeric value');
       return false;
     }
 
@@ -289,7 +290,7 @@
         errors = {};
         onEvent?.('form_load', { ...original });
       } else {
-        internalStatus = { message: res.message ?? 'Errore nel caricamento', type: 'error' };
+        internalStatus = { message: res.message ?? _('Error loading data'), type: 'error' };
       }
     } finally {
       loading = false;
@@ -358,7 +359,7 @@
           errors = errData.errors as Record<string, string>;
           focusFirstError();
         } else {
-          internalStatus = { message: res.message ?? 'Errore nel salvataggio', type: 'error' };
+          internalStatus = { message: res.message ?? _('Error saving'), type: 'error' };
         }
         return;
       }
@@ -370,7 +371,7 @@
       } else {
         original = { ...draft };
       }
-      internalStatus = { message: 'Salvato', type: 'success' };
+      internalStatus = { message: _('Saved'), type: 'success' };
       setTimeout(() => { if (internalStatus?.type === 'success') internalStatus = undefined; }, 3000);
       onEvent?.('form_save', { ...original });
       await onSave?.({ ...original });
@@ -380,7 +381,7 @@
   }
 
   function handleCancel() {
-    if (dirty && !confirm('Hai modifiche non salvate. Vuoi annullarle?')) return;
+    if (dirty && !confirm(_('You have unsaved changes. Discard them?'))) return;
     draft = { ...original };
     errors = {};
     onCancel?.();
@@ -510,7 +511,7 @@
       <!-- Placeholder: trigger not yet arrived -->
       <div class="flex h-full items-center justify-center">
         <p style="color: var(--cf-text-subtle)" class="text-sm">
-          Seleziona un elemento per visualizzare il dettaglio.
+          {_('Select an item to view the detail.')}
         </p>
       </div>
 
@@ -519,7 +520,7 @@
       <div class="flex h-full items-center justify-center gap-2"
            style="color: var(--cf-text-subtle)">
         <Loader size={16} class="animate-spin" />
-        <span class="text-sm">Caricamento…</span>
+        <span class="text-sm">{_('Loading…')}</span>
       </div>
 
     {:else if view.layout}
@@ -528,7 +529,7 @@
     {:else}
       {#if fieldGroups.length === 0}
         <p class="text-sm" style="color: var(--cf-text-subtle)">
-          Nessun campo configurato.
+          {_('No fields configured.')}
         </p>
       {/if}
 
@@ -590,13 +591,13 @@
           class="btn btn-primary py-1.5 text-xs"
           disabled={!dirty || saving}
           onclick={handleSave}
-          title="Conferma (F12 o Ctrl+Enter)"
+          title={_('Save (F12 or Ctrl+Enter)')}
         >
           {#if buttonStyle === 'icon' || buttonStyle === 'icon-label'}
             <Check size={14} />
           {/if}
           {#if buttonStyle !== 'icon'}
-            {saving ? 'Salvataggio…' : (action.label ?? 'Conferma')}
+            {saving ? _('Saving…') : (action.label ?? _('Save'))}
           {/if}
         </button>
       {:else if action.id === 'cancel'}
@@ -604,13 +605,13 @@
           class="btn btn-secondary py-1.5 text-xs"
           disabled={saving}
           onclick={handleCancel}
-          title="Annulla (Esc)"
+          title={_('Cancel (Esc)')}
         >
           {#if buttonStyle === 'icon' || buttonStyle === 'icon-label'}
             <X size={14} />
           {/if}
           {#if buttonStyle !== 'icon'}
-            {action.label ?? 'Annulla'}
+            {action.label ?? _('Cancel')}
           {/if}
         </button>
       {:else if action.id === 'separator'}
@@ -634,7 +635,7 @@
       {activeStatus.message}
     </span>
   {:else if dirty && isEditable}
-    <span class="text-xs" style="color: var(--cf-text-subtle)">Modifiche non salvate</span>
+    <span class="text-xs" style="color: var(--cf-text-subtle)">{_('Unsaved changes')}</span>
   {/if}
 {/snippet}
 

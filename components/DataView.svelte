@@ -16,6 +16,7 @@
    *   onEvent  (name, data) => void      unified event emitter (row_click, data_load, …)
    */
   import { untrack, getContext } from 'svelte';
+  import { _ } from '../i18n';
   import DataViewNavigator from './DataViewNavigator.svelte';
   import DataViewTable from './DataViewTable.svelte';
   import DataFormView from './DataFormView.svelte';
@@ -460,7 +461,7 @@
       stack.push(DataFormView, {
         formId,
         data: rowSnapshot,
-        title: 'Modifica',
+        title: 'Edit',
         onSaved: (savedData: Record<string, unknown>) => {
           const merged = { ...rowSnapshot, ...savedData };
           const idx = (rows as Record<string, unknown>[]).findIndex((r) => r[pkField] === rowId);
@@ -474,7 +475,7 @@
     }
 
     // Normal DB-backed form
-    const label = isNew ? `Nuovo ${model}` : `Modifica ${model}`;
+    const label = isNew ? `${_('New')} ${model}` : `${_('Edit')} ${model}`;
     stack.push(DataFormView, {
       formId,
       recordId: recordId ?? null,
@@ -543,7 +544,7 @@
   async function handleNavDelete() {
     if (_activeRowData == null) return;
     const id = (_activeRowData as any)[pkField];
-    if (!confirm(`Eliminare il record selezionato?`)) return;
+    if (!confirm(_('Delete the selected record?'))) return;
     const model = view.source?.model as string | undefined;
     if (!model) return;
     try {
@@ -556,7 +557,7 @@
         if (totalCount !== null) totalCount--;
         if (adjacentId != null) queueMicrotask(() => tableRef?.focusRowById(adjacentId));
       } else {
-        alert(res.message ?? 'Errore durante l\'eliminazione');
+        alert(res.message ?? _('Error deleting record'));
       }
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e));
@@ -660,7 +661,7 @@
         <svg viewBox="0 0 20 20" fill="currentColor" style="width:1.25rem;height:1.25rem;flex-shrink:0;opacity:0.4" aria-hidden="true">
           <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 0 1 .02-1.06L11.168 10 7.23 6.29a.75.75 0 1 1 1.04-1.08l4.5 4.25a.75.75 0 0 1 0 1.08l-4.5 4.25a.75.75 0 0 1-1.06-.02Z" clip-rule="evenodd"/>
         </svg>
-        Select a row to display the detail
+        {_('Select an item to view the detail.')}
       </div>
     {:else if error}
       <div class="cf-dv-error">

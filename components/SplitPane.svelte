@@ -188,7 +188,7 @@
         btn.className = 'cf-gutter-btn';
         btn.type = 'button';
         btn.textContent = arrowCollapse;
-        btn.title = 'Comprimi pannello';
+        btn.title = 'Collapse panel';
 
         btn.addEventListener('click', (e) => {
           e.stopPropagation();  // do not start drag
@@ -240,7 +240,7 @@
 </div>
 
 <style>
-  /* Wrapper: occupa tutto lo spazio disponibile dal genitore */
+  /* Wrapper: takes all available space from the parent */
   .cf-split-wrapper {
     display: flex;
     width: 100%;
@@ -251,14 +251,14 @@
   .cf-split-horizontal { flex-direction: row; }
   .cf-split-vertical   { flex-direction: column; }
 
-  /* Pannelli: overflow gestito per scroll interno */
+  /* Panels: overflow managed for internal scroll */
   .cf-split-pane {
     overflow: auto;
     min-width: 0;   /* fix flex shrink below content width */
     min-height: 0;
   }
 
-  /* Pane collassato a 0px: impedisce che il contenuto fuoriesca */
+  /* Pane collapsed to 0px: prevents content from overflowing */
   .cf-pane-collapsed {
     overflow: hidden !important;
   }
@@ -283,10 +283,10 @@
   :global(.cf-gutter-horizontal) { cursor: col-resize; }
   :global(.cf-gutter-vertical)   { cursor: row-resize; }
 
-  /* Pulsante toggle sul gutter.
-     appearance:none annulla gli stili che @tailwindcss/forms applica ai <button>.
-     \uFE0E nel textContent forza la presentazione testuale delle frecce Unicode
-     (senza, alcuni OS mostrano ▶ come emoji arancio). */
+  /* Toggle button on the gutter.
+     appearance:none removes the styles that @tailwindcss/forms applies to <button>.
+     \uFE0E in textContent forces text presentation of Unicode arrows
+     (without it, some OSes render ▶ as an orange emoji). */
   :global(.cf-gutter-btn) {
     appearance: none;
     -webkit-appearance: none;

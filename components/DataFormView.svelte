@@ -12,6 +12,7 @@
    *   onSaved     (savedData) => void  called after successful save with merged record (before pop)
    */
   import { getContext } from 'svelte';
+  import { _ } from '../i18n';
   import { stack as globalStack } from '$coframe/stack/stack.svelte';
   import type { StackInstance } from '$coframe/stack/stack.svelte';
   import { api } from '$coframe/api/client';
@@ -82,8 +83,8 @@
     <button
       class="cf-form-view-back"
       onclick={handleCancel}
-      title="Torna alla lista"
-      aria-label="Torna"
+      title={_('Back to list')}
+      aria-label={_('Back')}
     >
       ←
     </button>
@@ -107,7 +108,7 @@
     {:else}
       <div class="cf-form-view-loading">
         <div class="cf-form-view-spinner" aria-hidden="true"></div>
-        Caricamento…
+        {_('Loading…')}
       </div>
     {/if}
   </div>

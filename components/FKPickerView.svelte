@@ -7,6 +7,7 @@
    * with the selected row. Cancel (×) or ← pop with null.
    */
   import { getContext } from 'svelte';
+  import { _ } from '../i18n';
   import { stack as globalStack } from '$coframe/stack/stack.svelte';
   import type { StackInstance } from '$coframe/stack/stack.svelte';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
@@ -52,8 +53,8 @@
     <button
       class="cf-form-view-back"
       onclick={() => stack.pop(null)}
-      title="Annulla"
-      aria-label="Annulla"
+      title={_('Cancel')}
+      aria-label={_('Cancel')}
     >←</button>
     {#if title}
       <h2 class="cf-form-view-title">{title}</h2>

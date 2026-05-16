@@ -3,13 +3,14 @@
    * WidgetFKCombobox.svelte — FK field widget with server-side search.
    *
    * Keyboard: ↑↓ navigate options, Enter selects, Escape closes/restores,
-   * Tab closes. "Cerca altro…" is the last navigable item (opens picker).
+   * Tab closes. "Search more…" is the last navigable item (opens picker).
    *
    * field.foreign_key: { target: string; field: string }  — from auto-form
    * serverConfig.tables[target].display_field             — label column
    * serverConfig.tables[target].search_fields             — searchable columns
    */
   import { untrack, getContext } from 'svelte';
+  import { _ } from '../../i18n';
   import { api } from '$coframe/api/client';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
   import { stack as globalStack } from '$coframe/stack/stack.svelte';
@@ -40,7 +41,7 @@
   let options      = $state<Array<{ id: unknown; label: string }>>([]);
   let open         = $state(false);
   let searching    = $state(false);
-  // -1 = none; 0..options.length-1 = option; options.length = "Cerca altro…"
+  // -1 = none; 0..options.length-1 = option; options.length = "Search more…"
   let highlighted  = $state(-1);
   let inputEl      = $state<HTMLInputElement | undefined>();
   let listEl       = $state<HTMLUListElement | undefined>();
@@ -153,7 +154,7 @@
     onblur?.();
   }
 
-  // Total navigable items: options + "Cerca altro…"
+  // Total navigable items: options + "Search more…"
   function totalItems() { return options.length + 1; }
 
   function scrollHighlightedIntoView() {
@@ -213,7 +214,7 @@
     if (e.key === 'Enter') {
       e.preventDefault();
       if (highlighted === options.length) {
-        // "Cerca altro…" is highlighted
+        // "Search more…" is highlighted
         openPicker();
       } else if (highlighted >= 0 && highlighted < options.length) {
         selectOption(options[highlighted]);
@@ -240,7 +241,7 @@
     const _df      = displayField;
     stack.push(
       FKPickerView,
-      { table: _table, title: `Seleziona ${field.label ?? _table}` },
+      { table: _table, title: `Select ${field.label ?? _table}` },
       (row: unknown) => {
         if (!row || typeof row !== 'object') return;
         const r = row as Record<string, unknown>;
@@ -271,7 +272,7 @@
       bind:this={inputEl}
       type="text"
       class="input w-full pr-16 {field.error ? 'input-error' : ''}"
-      placeholder={field.placeholder as string | undefined ?? 'Cerca…'}
+      placeholder={field.placeholder as string | undefined ?? _('Search…')}
       value={query}
       oninput={handleInput}
       onkeydown={handleKeydown}
@@ -288,7 +289,7 @@
         class="absolute right-8 top-1/2 -translate-y-1/2 p-1"
         style="color: var(--cf-text-subtle)"
         onmousedown={(e) => { e.preventDefault(); clearValue(); }}
-        aria-label="Cancella selezione"
+        aria-label={_('Clear selection')}
       >
         <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -303,7 +304,7 @@
       style="color: var(--cf-text-subtle)"
       onmousedown={(e) => e.preventDefault()}
       onclick={() => { open = !open; if (open) inputEl?.focus(); }}
-      aria-label="Apri lista"
+      aria-label={_('Select')}
     >
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <polyline points="6 9 12 15 18 9"/>
@@ -320,9 +321,9 @@
       >
         <ul bind:this={listEl} class="max-h-48 overflow-auto py-1" role="listbox">
           {#if searching}
-            <li class="px-3 py-2 text-sm" style="color: var(--cf-text-subtle)">Ricerca…</li>
+            <li class="px-3 py-2 text-sm" style="color: var(--cf-text-subtle)">{_('Searching…')}</li>
           {:else if options.length === 0 && query.trim()}
-            <li class="px-3 py-2 text-sm" style="color: var(--cf-text-subtle)">Nessun risultato</li>
+            <li class="px-3 py-2 text-sm" style="color: var(--cf-text-subtle)">{_('No results')}</li>
           {:else}
             {#each options as opt, i (opt.id)}
               <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -340,7 +341,7 @@
           {/if}
         </ul>
 
-        <!-- Cerca altro… -->
+        <!-- Search more… -->
         <div style="border-top: 1px solid var(--cf-border-subtle, var(--cf-border))">
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <div
@@ -352,7 +353,7 @@
             style="color: var(--cf-text-subtle)"
             onclick={openPicker}
           >
-            Cerca altro…
+            {_('Search more…')}
           </div>
         </div>
       </div>

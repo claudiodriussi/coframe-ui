@@ -21,6 +21,7 @@
     ChevronDown, SquareCheckBig,
   } from 'lucide-svelte';
   import type { NavigatorConfig, CommandItem } from './dataview.types';
+  import { _, _t } from '../i18n';
 
   const LOAD_MORE_OPTIONS = [50, 100, 500];
 
@@ -126,32 +127,32 @@
 
     <!-- CRUD group -->
     {#if isVisible('add')}
-      <button class="cf-nav-btn" title="Aggiungi (Ins)" onclick={onAdd}>
+      <button class="cf-nav-btn" title={_('Add (Ins)')} onclick={onAdd}>
         <Plus size={14} />
       </button>
     {/if}
 
     {#if isVisible('edit')}
-      <button class="cf-nav-btn" title="Modifica (Enter)" disabled={!hasRow} onclick={onEdit}>
+      <button class="cf-nav-btn" title={_('Edit (Enter)')} disabled={!hasRow} onclick={onEdit}>
         <Pencil size={14} />
       </button>
     {/if}
 
     {#if isVisible('delete')}
-      <button class="cf-nav-btn cf-nav-btn-danger" title="Elimina (Del)" disabled={!hasRow} onclick={onDelete}>
+      <button class="cf-nav-btn cf-nav-btn-danger" title={_('Delete (Del)')} disabled={!hasRow} onclick={onDelete}>
         <Trash2 size={14} />
       </button>
     {/if}
 
     {#if isVisible('accept')}
       {@const acceptDisabled = mode === 'batch' ? false : !hasRow}
-      <button class="cf-nav-btn cf-nav-btn-primary" title="Accetta (Enter)" disabled={acceptDisabled} onclick={onAccept}>
+      <button class="cf-nav-btn cf-nav-btn-primary" title={_('Accept (Enter)')} disabled={acceptDisabled} onclick={onAccept}>
         <Check size={14} />
       </button>
     {/if}
 
     {#if isVisible('cancel')}
-      <button class="cf-nav-btn" title="Annulla (Esc)" onclick={onCancel}>
+      <button class="cf-nav-btn" title={_('Cancel (Esc)')} onclick={onCancel}>
         <X size={14} />
       </button>
     {/if}
@@ -180,7 +181,7 @@
       <button
         class="cf-nav-btn"
         class:cf-nav-btn-active={selectMode}
-        title="Selezione multipla"
+        title={_('Multiple selection')}
         onclick={onToggleSelect}
       >
         <SquareCheckBig size={14} />
@@ -192,7 +193,7 @@
       <button
         class="cf-nav-btn"
         class:cf-nav-btn-active={filterMode}
-        title="Filtro colonne"
+        title={_('Column filter')}
         onclick={onToggleFilter}
       >
         <Funnel size={14} />
@@ -201,35 +202,35 @@
 
     <!-- Search (placeholder — server-side query, Sprint 5) -->
     {#if isVisible('search')}
-      <button class="cf-nav-btn" title="Ricerca avanzata" disabled>
+      <button class="cf-nav-btn" title={_('Advanced search')} disabled>
         <Search size={14} />
       </button>
     {/if}
 
     <!-- GroupBy (placeholder — Sprint 4) -->
     {#if isVisible('groupby')}
-      <button class="cf-nav-btn" title="Raggruppa" disabled>
+      <button class="cf-nav-btn" title={_('Group by')} disabled>
         <Group size={14} />
       </button>
     {/if}
 
     <!-- Export -->
     {#if isVisible('export')}
-      <button class="cf-nav-btn" title="Esporta CSV (F7)" onclick={onExport}>
+      <button class="cf-nav-btn" title={_('Export CSV (F7)')} onclick={onExport}>
         <Download size={14} />
       </button>
     {/if}
 
     <!-- Print (placeholder) -->
     {#if isVisible('print')}
-      <button class="cf-nav-btn" title="Stampa (F5)" disabled>
+      <button class="cf-nav-btn" title={_('Print (F5)')} disabled>
         <Printer size={14} />
       </button>
     {/if}
 
     <!-- Refresh -->
     {#if isVisible('refresh')}
-      <button class="cf-nav-btn" title="Aggiorna (F6)" onclick={onRefresh}>
+      <button class="cf-nav-btn" title={_('Refresh (F6)')} onclick={onRefresh}>
         <RefreshCw size={14} />
       </button>
     {/if}
@@ -239,7 +240,7 @@
       <div class="cf-nav-loadmore-wrap">
         <button
           class="cf-nav-btn cf-nav-loadmore-btn"
-          title="Carica altri"
+          title={_('Load more')}
           onclick={() => (loadMoreOpen = !loadMoreOpen)}
           disabled={loadingMore}
         >
@@ -255,13 +256,13 @@
             {#each LOAD_MORE_OPTIONS as n (n)}
               <button class="cf-nav-menu-item" role="menuitem"
                 onclick={() => { loadMoreOpen = false; onLoadMore?.(n); }}>
-                Carica {n} righe
+                {_t('Load {n} rows', { n })}
               </button>
             {/each}
             <div class="cf-nav-menu-sep" role="separator"></div>
             <button class="cf-nav-menu-item" role="menuitem"
               onclick={() => { loadMoreOpen = false; onLoadMore?.(0); }}>
-              Carica tutto
+              {_('Load all')}
             </button>
           </div>
         {/if}

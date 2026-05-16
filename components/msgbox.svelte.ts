@@ -1,3 +1,5 @@
+import { _ } from '../i18n';
+
 export type DialogVariant = 'info' | 'warning' | 'error' | 'danger';
 export type ButtonVariant = 'primary' | 'secondary' | 'danger';
 
@@ -52,13 +54,13 @@ export const msgbox = {
   /** Requires explicit choice — not dismissible by clicking outside */
   confirm(message: string, title?: string): Promise<boolean> {
     return show({
-      title: title ?? 'Conferma',
+      title: title ?? _('Confirm'),
       message,
       variant: 'warning',
       modal: true,
       buttons: [
-        { label: 'Annulla',  value: false, variant: 'secondary' },
-        { label: 'Conferma', value: true,  variant: 'primary'   },
+        { label: _('Cancel'),  value: false, variant: 'secondary' },
+        { label: _('Confirm'), value: true,  variant: 'primary'   },
       ],
     }) as Promise<boolean>;
   },
@@ -80,12 +82,12 @@ export const msgbox = {
    */
   error(message: string, detail?: string, title?: string): Promise<void> {
     return show({
-      title: title ?? 'Errore',
+      title: title ?? _('Error'),
       message,
       detail,
       variant: 'error',
       modal: false,
-      buttons: [{ label: 'Chiudi', value: undefined, variant: 'secondary' }],
+      buttons: [{ label: _('Close'), value: undefined, variant: 'secondary' }],
     }) as Promise<void>;
   },
 

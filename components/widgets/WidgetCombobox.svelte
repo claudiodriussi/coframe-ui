@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { _ } from '../../i18n';
   import { Combobox } from 'bits-ui';
   import type { FormField, FormFieldChoice } from '../dataform.types';
 
@@ -65,14 +66,14 @@
     <div class="relative">
       <Combobox.Input
         class="input pr-8 {field.error ? 'input-error' : ''}"
-        placeholder={field.placeholder as string | undefined ?? 'Seleziona…'}
+        placeholder={field.placeholder as string | undefined ?? _('Select…')}
         oninput={(e) => (query = (e.target as HTMLInputElement).value)}
         onblur={handleInputBlur}
         aria-label={field.label ?? field.name}
       />
       <Combobox.Trigger
         class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-        aria-label="Apri lista"
+        aria-label={_('Select')}
       >
         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"/>
@@ -87,7 +88,7 @@
       >
         <Combobox.Viewport class="max-h-48 overflow-auto py-1">
           {#if filtered.length === 0}
-            <div class="px-3 py-2 text-sm text-gray-400">Nessun risultato</div>
+            <div class="px-3 py-2 text-sm text-gray-400">{_('No results')}</div>
           {:else}
             {#each filtered as choice (choice.value)}
               <Combobox.Item
