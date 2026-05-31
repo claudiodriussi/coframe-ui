@@ -15,10 +15,10 @@
 
 import { api } from './client';
 
-// ── Client-side widget map for SQLAlchemy base types ────────────────────────
-// Used as fallback when walking the inheritance chain.
-// Kept in the client, not the server, because different clients (web, mobile,
-// desktop) may map the same base type to a different input control.
+// ── Client-side rendering maps for base types ────────────────────────────────
+// Kept in the client: different clients (web, mobile, desktop) may render
+// the same type differently. Server is UI-agnostic.
+
 export const BASE_WIDGET_MAP: Record<string, string> = {
   String:      'text',
   Text:        'textarea',
@@ -31,6 +31,26 @@ export const BASE_WIDGET_MAP: Record<string, string> = {
   Time:        'time',
   JSON:        'json',
   LargeBinary: 'file',
+};
+
+export const BASE_FORMATTER_MAP: Record<string, string> = {
+  Integer:  'integer',
+  Float:    'decimal',
+  Numeric:  'decimal',
+  Decimal:  'decimal',
+  Money:    'money',
+  Date:     'date',
+  DateTime: 'datetime',
+  FK:       'fk_label',
+};
+
+export const BASE_ALIGN_MAP: Record<string, 'left' | 'right' | 'center'> = {
+  Integer:  'right',
+  Float:    'right',
+  Numeric:  'right',
+  Decimal:  'right',
+  Money:    'right',
+  Boolean:  'center',
 };
 
 // ── Types — mirror DbType.to_client_dict() server output ────────────────────
@@ -75,6 +95,20 @@ export interface TypeInfo {
 }
 
 export type TypeRegistry = Record<string, TypeInfo>;
+
+// ── Schema registry ───────────────────────────────────────────────────────────
+
+export interface SchemaFieldInfo {
+  type?: string;
+  widget?: string;
+  formatter?: string;
+  align?: string;
+  table?: string;        // FK: target table
+  label_field?: string;  // FK: display field
+  [key: string]: unknown;
+}
+
+export type SchemaRegistry = Record<string, Record<string, SchemaFieldInfo>>;
 
 // ── Table schema ─────────────────────────────────────────────────────────────
 
@@ -155,12 +189,39 @@ export function resolveWidget(typeName: string, registry: TypeRegistry): string 
   return undefined;
 }
 
+export function resolveFormatter(typeName: string, registry: TypeRegistry): string | undefined {
+  if (BASE_FORMATTER_MAP[typeName]) return BASE_FORMATTER_MAP[typeName];
+  const info = registry[typeName];
+  if (!info) return undefined;
+  if (info.formatter) return info.formatter as string;
+  for (const ancestor of info.inheritance) {
+    if (BASE_FORMATTER_MAP[ancestor]) return BASE_FORMATTER_MAP[ancestor];
+    const a = registry[ancestor];
+    if (a?.formatter) return a.formatter as string;
+  }
+  return undefined;
+}
+
+export function resolveAlign(typeName: string, registry: TypeRegistry): 'left' | 'right' | 'center' | undefined {
+  if (BASE_ALIGN_MAP[typeName]) return BASE_ALIGN_MAP[typeName];
+  const info = registry[typeName];
+  if (!info) return undefined;
+  if (info.align) return info.align as 'left' | 'right' | 'center';
+  for (const ancestor of info.inheritance) {
+    if (BASE_ALIGN_MAP[ancestor]) return BASE_ALIGN_MAP[ancestor];
+    const a = registry[ancestor];
+    if (a?.align) return a.align as 'left' | 'right' | 'center';
+  }
+  return undefined;
+}
+
 // ── ServerConfigStore ────────────────────────────────────────────────────────
 
 class ServerConfigStore {
   types       = $state<TypeRegistry>({});
   config      = $state<ServerConfigData>({});
   tables      = $state<TableRegistry>({});
+  schemas     = $state<SchemaRegistry>({});
   loaded      = $state(false);
   loading     = $state(false);
   error       = $state<string | null>(null);
@@ -181,7 +242,7 @@ class ServerConfigStore {
     this.error   = null;
 
     try {
-      const res = await api.endpoint<{ config: ServerConfigData; types: TypeRegistry; tables: TableRegistry }>(
+      const res = await api.endpoint<{ config: ServerConfigData; types: TypeRegistry; tables: TableRegistry; schemas: SchemaRegistry }>(
         'get_server_config',
         { include_builtin: includeBuiltin },
       );
@@ -190,6 +251,7 @@ class ServerConfigStore {
         this.config      = res.data.config  ?? {};
         this.types       = res.data.types   ?? {};
         this.tables      = res.data.tables  ?? {};
+        this.schemas     = res.data.schemas ?? {};
         this.loaded      = true;
         this.withBuiltin = includeBuiltin;
       } else {
@@ -202,9 +264,16 @@ class ServerConfigStore {
     }
   }
 
-  /** Resolve widget for a type name using the current registry. */
   resolveWidget(typeName: string): string | undefined {
     return resolveWidget(typeName, this.types);
+  }
+
+  resolveFormatter(typeName: string): string | undefined {
+    return resolveFormatter(typeName, this.types);
+  }
+
+  resolveAlign(typeName: string): 'left' | 'right' | 'center' | undefined {
+    return resolveAlign(typeName, this.types);
   }
 
   /** Clear cache so the next load() triggers a fresh fetch. */
@@ -212,6 +281,7 @@ class ServerConfigStore {
     this.types   = {};
     this.config  = {};
     this.tables  = {};
+    this.schemas = {};
     this.loaded  = false;
     this.error   = null;
   }

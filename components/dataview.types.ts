@@ -81,5 +81,6 @@ export interface ViewDescriptor {
   navigator?: boolean | NavigatorConfig;
   /** List of available view types for the toolbar switcher (e.g. ['table','kanban']). */
   allow_views?: string[];
+  data_schema?: string;  // schema ID from plugin schemas: section
   [key: string]: unknown;
 }

@@ -22,7 +22,8 @@
   import DataFormView from './DataFormView.svelte';
   import type { ColumnDef } from '$coframe/tabulator/CoframeTable';
   import { api } from '$coframe/api/client';
-  import { serverConfig } from '$coframe/api/serverConfig.svelte';
+  import { serverConfig, resolveFormatter as resolveFormatterByType, resolveAlign } from '$coframe/api/serverConfig.svelte';
+  import type { SchemaFieldInfo } from '$coframe/api/serverConfig.svelte';
   import { resolveFormatter } from '$coframe/formatters/registry';
   import { stack as globalStack } from '$coframe/stack/stack.svelte';
   import type { StackInstance } from '$coframe/stack/stack.svelte';
@@ -237,6 +238,33 @@
     alignsInferred    = true;
   }
 
+  function _applySchemaHints(schema: Record<string, SchemaFieldInfo>) {
+    const aligns: Record<string, 'left' | 'right' | 'center'> = {};
+    const fmts: Record<string, string> = {};
+    for (const [field, info] of Object.entries(schema)) {
+      const typeName = info.type as string | undefined;
+      if (typeName) {
+        const a = resolveAlign(typeName, serverConfig.types);
+        if (a) aligns[field] = a;
+        const f = resolveFormatterByType(typeName, serverConfig.types);
+        if (f) fmts[field] = f;
+      }
+      if (info.align) aligns[field] = info.align as 'left' | 'right' | 'center';
+      if (info.formatter) fmts[field] = info.formatter as string;
+    }
+    inferredAligns     = aligns;
+    inferredFormatters = fmts;
+    alignsInferred     = true;
+  }
+
+  // Apply data_schema declared in the view descriptor when schema registry is ready.
+  $effect(() => {
+    const ds = view.data_schema as string | undefined;
+    if (!ds) return;
+    const schema = serverConfig.schemas[ds];
+    if (schema) _applySchemaHints(schema);
+  });
+
   // ── Column mapping ─────────────────────────────────────────────────────────
 
   const columnDefs = $derived.by((): ColumnDef[] => {
@@ -376,7 +404,12 @@
         const res = await api.endpoint(src.endpoint, params);
         if (res.status === 'success') {
           rows = Array.isArray(res.data) ? res.data : [];
-          _inferColumnTypes(rows);
+          const payloadSchema = (res as Record<string, unknown>).schema as Record<string, SchemaFieldInfo> | undefined;
+          if (payloadSchema) {
+            _applySchemaHints(payloadSchema);
+          } else {
+            _inferColumnTypes(rows);
+          }
         } else {
           error = res.message ?? 'Endpoint call failed';
           rows = [];

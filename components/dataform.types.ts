@@ -155,6 +155,7 @@ export interface FormDescriptor {
   layout?: LayoutNode[];       // new layout engine — takes precedence over fields
   actions?: FormActions;
   policy?: FormPolicy;
+  data_schema?: string;        // schema ID from plugin schemas: section
   [key: string]: unknown;
 }
 

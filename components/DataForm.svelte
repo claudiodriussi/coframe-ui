@@ -29,6 +29,8 @@
   import WidgetCombobox from './widgets/WidgetCombobox.svelte';
   import WidgetFKCombobox from './widgets/WidgetFKCombobox.svelte';
   import { _ } from '../i18n';
+  import { serverConfig } from '../api/serverConfig.svelte';
+  import type { SchemaFieldInfo } from '../api/serverConfig.svelte';
   import type {
     FormDescriptor, FormField, FormStatus,
     LayoutNode, SectionNode, SectionField, FillerField, ColumnDef,
@@ -60,6 +62,14 @@
     onSave,
     onCancel
   }: Props = $props();
+
+  // ── Schema resolution ─────────────────────────────────────────────────────
+
+  const resolvedSchema = $derived.by((): Record<string, SchemaFieldInfo> | null => {
+    const ds = view.data_schema;
+    if (!ds) return null;
+    return serverConfig.schemas[ds] ?? null;
+  });
 
   // ── Layout engine helpers ──────────────────────────────────────────────────
 
@@ -191,7 +201,17 @@
   function resolveWidget(field: FormField): string {
     if (field.widget) return field.widget as string;
     if (field.foreign_key) return 'fk';
-    const t = (field.type ?? '').toLowerCase();
+
+    const schemaField = resolvedSchema?.[field.name];
+    const effectiveType = (schemaField?.type ?? field.type) as string | undefined;
+
+    if (effectiveType) {
+      const w = serverConfig.resolveWidget(effectiveType);
+      if (w) return w;
+    }
+
+    // Legacy fallback for inline type strings not in the registry
+    const t = (effectiveType ?? '').toLowerCase();
     if (t === 'bool' || t === 'boolean') return 'boolean';
     if (t === 'date') return 'date';
     if (t === 'datetime') return 'datetime';
