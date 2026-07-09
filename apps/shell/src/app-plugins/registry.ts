@@ -6,7 +6,7 @@
  * e.g. library/client/Hello.svelte → library.hello
  *      library/Hello.svelte        → library.hello
  *
- * $plugins → coframe/artmob/plugins/  (via svelte.config.js alias)
+ * $plugins → coframe/<COFRAME_APP>/plugins/  (via svelte.config.js alias)
  */
 import { createPluginLoaderFromGlob } from '$coframe/plugins/loader';
 

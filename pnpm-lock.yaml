@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  apps/artmob:
+  apps/devtest:
     dependencies:
       '@coframe/ui':
         specifier: workspace:*
@@ -105,7 +105,7 @@ importers:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@22.19.11)(jiti@2.6.1)(lightningcss@1.31.1)
 
-  apps/devtest:
+  apps/shell:
     dependencies:
       '@coframe/ui':
         specifier: workspace:*

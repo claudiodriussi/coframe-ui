@@ -17,8 +17,8 @@
 <div class="flex min-h-screen items-center justify-center bg-gray-50">
   {#if ready}
     <div class="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm text-center">
-      <h1 class="mb-2 text-2xl font-semibold text-gray-900">Artmob</h1>
-      <p class="mb-8 text-sm text-gray-500">Rilevamento produzione</p>
+      <h1 class="mb-2 text-2xl font-semibold text-gray-900">Coframe</h1>
+      <p class="mb-8 text-sm text-gray-500">Client</p>
 
       {#if authStore.isAuthenticated}
         <p class="mb-6 text-sm text-gray-600">
