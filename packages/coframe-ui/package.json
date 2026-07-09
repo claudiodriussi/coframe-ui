@@ -1,0 +1,22 @@
+{
+  "name": "@coframe/ui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Coframe UI core library (components, api client, auth, stack, i18n, tabulator).",
+  "exports": {
+    "./*": "./*"
+  },
+  "peerDependencies": {
+    "svelte": "^5"
+  },
+  "dependencies": {
+    "@internationalized/date": "^3.11.0",
+    "axios": "^1.13.5",
+    "bits-ui": "^2.16.0",
+    "jwt-decode": "^4.0.0",
+    "lucide-svelte": "^1.0.1",
+    "split.js": "^1.6.5",
+    "tabulator-tables": "^6.3.1"
+  }
+}

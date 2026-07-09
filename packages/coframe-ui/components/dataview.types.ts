@@ -1,0 +1,86 @@
+/**
+ * dataview.types.ts — shared type definitions for DataView and related components.
+ *
+ * Centralised here to avoid circular imports between DataView.svelte,
+ * DataViewToolbar.svelte, DataViewTable.svelte, and dataview.query.ts.
+ */
+
+export interface ViewSource {
+  model?: string;
+  endpoint?: string;
+  joins?: Array<string | Record<string, unknown>>;
+  where?: unknown[];
+  filters?: unknown;
+  order_by?: string[];
+  group_by?: string[];
+  limit?: number;
+  [key: string]: unknown;
+}
+
+export interface ViewColumn {
+  field: string;           // QB select expression or plain field name
+  title?: string;
+  width?: number | string;
+  minWidth?: number;
+  maxWidth?: number;
+  hozAlign?: 'left' | 'center' | 'right';  // Tabulator native
+  align?: 'left' | 'center' | 'right';      // user-friendly alias for hozAlign
+  formatter?: 'date' | 'datetime' | 'time' | string;
+  formatterParams?: Record<string, unknown>;
+  visible?: boolean;
+  frozen?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ViewActions {
+  toolbar?: string[];
+  row?: Array<Record<string, unknown>>;
+  commands?: Array<Record<string, unknown>>;
+}
+
+export interface ViewPolicy {
+  selection?: boolean;
+  editable?: boolean;
+  user_customizable?: boolean;
+}
+
+export interface ViewTreeConfig {
+  parent_field?: string;
+  child_field?: string;
+  start_expanded?: boolean;
+}
+
+export interface CommandItem {
+  id: string;
+  label: string;
+  icon?: string;
+  scope?: 'row' | 'selection' | 'global';
+  toolbar?: boolean;   // true → shown as direct button in navigator
+  endpoint?: string;   // endpoint to call when activated
+  [key: string]: unknown;
+}
+
+export interface NavigatorConfig {
+  form_id?: string;    // default: {model.lower()}_form
+  handler?: string;    // view_handler chain name
+  show?: string[];     // add to defaults
+  hide?: string[];     // remove from defaults
+  commands?: CommandItem[];
+  // mode is internal only — set programmatically (e.g. 'lookup' for FK picker)
+  mode?: 'browser' | 'lookup' | 'readonly';
+}
+
+export interface ViewDescriptor {
+  type: 'table' | 'tree' | 'kanban' | 'cards' | string;
+  title?: string;
+  source?: ViewSource;
+  columns?: ViewColumn[];
+  actions?: ViewActions;
+  policy?: ViewPolicy;
+  tree?: ViewTreeConfig;
+  navigator?: boolean | NavigatorConfig;
+  /** List of available view types for the toolbar switcher (e.g. ['table','kanban']). */
+  allow_views?: string[];
+  data_schema?: string;  // schema ID from plugin schemas: section
+  [key: string]: unknown;
+}
