@@ -609,7 +609,7 @@
       {#if action.id === 'save'}
         <button
           class="btn btn-primary py-1.5 text-xs"
-          disabled={!dirty || saving}
+          disabled={saving}
           onclick={handleSave}
           title={_('Save (F12 or Ctrl+Enter)')}
         >
