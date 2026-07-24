@@ -26,7 +26,7 @@ export const BASE_WIDGET_MAP: Record<string, string> = {
   Float:       'number',
   Numeric:     'number',
   Boolean:     'checkbox',
-  DateTime:    'datetime-local',
+  DateTime:    'datetime',
   Date:        'date',
   Time:        'time',
   JSON:        'json',

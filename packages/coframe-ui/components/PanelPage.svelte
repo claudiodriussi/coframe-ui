@@ -1,0 +1,63 @@
+<script lang="ts">
+  /**
+   * PanelPage.svelte — generic bridge for `stack.push(PanelPage, { panelId })`.
+   *
+   * Resolves a page id via `get_page` and renders it with PanelRenderer. This is
+   * the missing link between a menu leaf's `action: stack_push, panel: <id>` and
+   * the Stack, which only knows how to push resolved components (docs/pending/menu.md §5).
+   */
+  import { api } from '$coframe/api/client';
+  import PanelRenderer from './PanelRenderer.svelte';
+
+  interface Props {
+    panelId: string;
+  }
+
+  let { panelId }: Props = $props();
+
+  let panel = $state<Record<string, unknown> | null>(null);
+  let error = $state<string | null>(null);
+  let loading = $state(false);
+
+  async function load(id: string) {
+    panel = null;
+    error = null;
+    loading = true;
+    try {
+      const res = await api.endpoint('get_page', { id });
+      if (res.status === 'success') {
+        panel = res.data as Record<string, unknown>;
+      } else {
+        error = res.message ?? 'Unknown error';
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  $effect(() => {
+    load(panelId);
+  });
+</script>
+
+<div class="h-full w-full overflow-hidden">
+  {#if loading}
+    <div class="flex h-full items-center justify-center gap-2 text-sm text-gray-500">
+      <div
+        class="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
+      ></div>
+      Loading…
+    </div>
+  {:else if error}
+    <div class="flex h-full items-center justify-center p-4">
+      <div class="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <strong>Error:</strong>
+        {error}
+      </div>
+    </div>
+  {:else if panel}
+    <PanelRenderer {panel} />
+  {/if}
+</div>
