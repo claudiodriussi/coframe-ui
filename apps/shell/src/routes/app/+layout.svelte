@@ -18,6 +18,11 @@
 
   let ready = $state(false);
 
+  function handleLogout() {
+    authStore.logout();
+    goto('/login');
+  }
+
   onMount(async () => {
     authStore.checkAuth();
     if (!authStore.isAuthenticated) {
@@ -40,9 +45,18 @@
   <div class="flex h-screen flex-col overflow-hidden">
     <div class="flex flex-1 min-h-0">
       <!-- Sidebar -->
-      <aside class="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-white">
+      <aside class="flex w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
         <div class="p-4 text-sm font-semibold text-gray-900">Coframe</div>
-        <MenuSidebar />
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          <MenuSidebar />
+        </div>
+        <!-- Footer: current user + logout (app-only flow, no landing card) -->
+        <div class="border-t border-gray-200 p-3">
+          {#if authStore.user}
+            <div class="mb-2 truncate px-1 text-xs text-gray-500">{authStore.user.username}</div>
+          {/if}
+          <button onclick={handleLogout} class="btn btn-secondary w-full text-sm">Logout</button>
+        </div>
       </aside>
 
       <!-- Main content (Desktop, single-tab for now) -->

@@ -30,6 +30,10 @@ class AuthStore {
     if (typeof window !== 'undefined') {
       // 401 — session expired or token rejected by server
       window.addEventListener('coframe:unauthorized', () => {
+        // Clear the now-invalid token: leaving it in localStorage lets the
+        // landing route re-apply it and bounce back to an apparently
+        // logged-in state.
+        api.logout();
         this.user = null;
         this.error = 'Session expired. Please sign in again.';
         goto('/');
@@ -37,13 +41,21 @@ class AuthStore {
     }
   }
 
-  // Decode JWT and update user state (client-side only — no signature check)
+  // Decode JWT and update user state (client-side only — no signature check).
+  // Expiry (`exp`) IS enforced: a stale token must not re-authenticate the
+  // user after the server has already rejected the session with a 401.
   private _applyToken(token: string): void {
     try {
       type JwtPayload = UserContext & { exp?: number; iat?: number };
-      const { exp: _exp, iat: _iat, ...user } = jwtDecode<JwtPayload>(token);
+      const { exp, iat: _iat, ...user } = jwtDecode<JwtPayload>(token);
+      if (exp && exp * 1000 <= Date.now()) {
+        api.logout();
+        this.user = null;
+        return;
+      }
       this.user = user as UserContext;
     } catch {
+      api.logout();
       this.user = null;
     }
   }
