@@ -24,16 +24,16 @@ const classic: BlueprintDef = {
       // area1 = top strip (used here as the header)
       area1: {
         start: [{ component: 'logo' }, { component: 'title' }],
-        end: [
-          { component: 'current-user' },
-          { component: 'clock' },
-          { component: 'login-logout' },
-        ],
+        end: [{ component: 'current-user' }, { component: 'login-logout' }],
       },
       // area2 = left strip (used here as the sidebar)
       area2: [{ component: 'menu-tree', props: { rootId: 'main' } }],
       // area3 = main (the desktop work-area)
       area3: [{ component: 'work-area' }],
+      // area4 = bottom strip (used here as the status bar)
+      area4: {
+        start: [{ component: 'current-date' }, { component: 'status-area' }],
+      },
     },
   },
 };

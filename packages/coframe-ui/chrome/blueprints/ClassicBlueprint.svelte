@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
 
-  // Classic desktop blueprint: top bar / left sidebar / main.
+  // Classic desktop blueprint: top bar / left sidebar / main / status bar.
   //
   // Structure only — the blueprint owns the §2.4 height contract (root
   // h-screen + overflow-hidden; body min-h-0; main is the overflow-hidden
-  // host so the work-area inside is the single scroller). It does NOT know
+  // host so the work-area inside is the single scroller; the status bar is a
+  // flex:0 0 auto footer that doesn't steal the scroll). It does NOT know
   // what fills each area — that's the composition. Areas are anonymous:
   // `area1` is "the top strip", not "the header".
   let { area }: { area: Snippet<[string]> } = $props();
@@ -17,6 +18,7 @@
     <aside class="cf-classic-side">{@render area('area2')}</aside>
     <main class="cf-classic-main">{@render area('area3')}</main>
   </div>
+  <footer class="cf-classic-status">{@render area('area4')}</footer>
 </div>
 
 <style>
@@ -51,6 +53,11 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+    background: var(--cf-surface);
+  }
+  .cf-classic-status {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--cf-border);
     background: var(--cf-surface);
   }
 </style>

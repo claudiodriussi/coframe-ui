@@ -16,6 +16,8 @@ import Title from './components/Title.svelte';
 import CurrentUser from './components/CurrentUser.svelte';
 import LoginLogout from './components/LoginLogout.svelte';
 import Clock from './components/Clock.svelte';
+import CurrentDate from './components/CurrentDate.svelte';
+import StatusArea from './components/StatusArea.svelte';
 import WorkArea from './components/WorkArea.svelte';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,6 +27,8 @@ export const registry: Record<string, Component<any>> = {
   'current-user': CurrentUser,
   'login-logout': LoginLogout,
   clock: Clock,
+  'current-date': CurrentDate,
+  'status-area': StatusArea,
   'menu-tree': MenuSidebar,
   'work-area': WorkArea,
   // Declared but not yet implemented (slots stay empty if referenced):

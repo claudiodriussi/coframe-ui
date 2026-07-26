@@ -9,6 +9,9 @@ export interface UserContext {
   email: string;
   is_active: boolean;
   is_admin: boolean;
+  // Operational ("working") date (YYYY-MM-DD) — framework context field, always
+  // present. Default = server system date at login; overridable via updateContext.
+  op_date?: string;
   // Multi-tenancy (optional — only present when multi_tenant.enabled)
   tenant_id?: number;
   tenant_prefix?: string | null;

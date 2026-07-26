@@ -12,6 +12,7 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosError } from 'axios';
 import { config } from '../config';
+import { statusBar } from '../status/statusBar.svelte';
 import type { LoginCredentials, AuthResponse, APIResponse, UserContext } from './types';
 
 const TOKEN_KEY = 'coframe_token';
@@ -141,6 +142,12 @@ class CoframeAPI {
         data
       );
       const d = res.data;
+      // Ambient status line: the server may carry a standard `$message`; when it
+      // doesn't, a prior server message is stale and gets dropped. Client
+      // messages persist across endpoint calls (statusBar owns that rule).
+      const sm = d?.['$message'];
+      if (sm?.text) statusBar.fromServer(sm);
+      else statusBar.clearServer();
       if (d?.status === 'success') {
         return { status: 'success', data: d.data };
       }
