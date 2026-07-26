@@ -30,6 +30,7 @@
   import WidgetFKCombobox from './widgets/WidgetFKCombobox.svelte';
   import { _ } from '../i18n';
   import { serverConfig } from '../api/serverConfig.svelte';
+  import { authStore } from '../auth/store.svelte';
   import type { SchemaFieldInfo } from '../api/serverConfig.svelte';
   import type {
     FormDescriptor, FormField, FormStatus,
@@ -282,6 +283,64 @@
     return sid as number | string | null | undefined;
   }
 
+  // ── Create-mode defaults (init event → set-value) ──────────────────────────
+  //
+  // Field defaults come from the table schema (per-column default/deferred),
+  // overlaid by the descriptor's explicit source.defaults (author wins).
+  // Per the form model, three cases per field:
+  //   • deferred     → not prefilled (server fills at save; e.g. timestamps)
+  //   • "$token"     → resolved from the local context registry (e.g. $op_date)
+  //   • direct value → used as-is
+  // An unknown "$token" on a non-deferred field is a config error: log + leave
+  // empty (never guess, never call an endpoint here).
+
+  // Tokens the client can resolve from context. Anything else is server
+  // territory and must be `deferred`.
+  const CONTEXT_TOKENS: Record<string, () => unknown> = {
+    op_date: () => authStore.user?.op_date,
+  };
+
+  function resolveToken(raw: string): { set: boolean; value?: unknown } {
+    const getter = CONTEXT_TOKENS[raw.slice(1)];
+    if (!getter) {
+      console.error(`[DataForm] Unknown context default "${raw}" on a non-deferred field — leaving empty. Mark it deferred or register the token.`);
+      return { set: false };
+    }
+    const v = getter();
+    return v == null ? { set: false } : { set: true, value: v };
+  }
+
+  function computeCreateDefaults(src: FormDescriptor['source']): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    // 1) schema column defaults (model mode)
+    const table = src?.model ? serverConfig.tables[src.model] : undefined;
+    for (const col of table?.columns ?? []) {
+      if (col.deferred) continue;                         // filled at save
+      const raw = col.default;
+      if (typeof raw === 'string') {
+        if (raw.startsWith('$')) {
+          const r = resolveToken(raw);
+          if (r.set) out[col.name] = r.value;
+        }
+        // Non-$ string defaults are still codegen expressions ("'A'",
+        // "datetime.now"), not clean values — skip until value/select handling.
+      } else if (raw != null) {
+        out[col.name] = raw;                              // scalar (bool/number)
+      }
+    }
+    // 2) descriptor defaults win (author values: resolve $-tokens, keep literals)
+    const descr = (src?.defaults ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(descr)) {
+      if (typeof v === 'string' && v.startsWith('$')) {
+        const r = resolveToken(v);
+        if (r.set) out[k] = r.value;
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  }
+
   async function loadData() {
     const src = view.source;
     loading = true;
@@ -292,7 +351,7 @@
         const id = resolveRecordId();
         if (id === null || id === undefined) {
           // Create mode: initialize with defaults, no load
-          const defaults = (src?.defaults ?? {}) as Record<string, unknown>;
+          const defaults = computeCreateDefaults(src);
           original = { ...defaults };
           draft = { ...defaults };
           errors = {};

@@ -120,6 +120,11 @@ export interface TableColumnInfo {
   editable?: boolean;
   nullable?: boolean;
   secret?: boolean;
+  /** Column default (from model YAML). May be a `$`-token (e.g. "$op_date"),
+   *  a JSON scalar, or a codegen expression string. See DataForm create-mode. */
+  default?: unknown;
+  /** Deferred default: filled server-side at save, never prefilled in a form. */
+  deferred?: boolean;
   foreign_key?: { target: string; field: string };
   [key: string]: unknown;
 }
