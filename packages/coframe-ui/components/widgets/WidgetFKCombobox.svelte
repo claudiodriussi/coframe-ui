@@ -68,6 +68,10 @@
   });
 
   // All parameters explicit — no outer-scope $derived access inside async body.
+  // `resolve: true` — this reads a value that is already stored, so it must not
+  // go through the server's visibility filters: a record archived (or no longer
+  // matching the picklist's domain) after the document was saved must still
+  // render its label. Only the search below is filtered.
   async function _loadLabel(v: unknown, table: string, pkField: string, df: string) {
     try {
       const res = await api.endpoint('query', {
@@ -77,6 +81,7 @@
           columns: [pkField, df],
           filters: { conditions: { column: pkField, op: 'eq', value: v } },
           limit: 1,
+          resolve: true,
         },
       });
       if (res.status === 'success' && Array.isArray(res.data) && res.data.length > 0) {
