@@ -11,6 +11,15 @@ export interface ViewSource {
   joins?: Array<string | Record<string, unknown>>;
   where?: unknown[];
   filters?: unknown;
+  /**
+   * Permanent WHERE of the view, always ANDed with `filters`. Same syntax as
+   * `filters`. What separates the two is who may change them: `filters` is the
+   * starting point of a query the user can rework, `domain` is what the view
+   * *is* — the customers list shows customers, and there is no "show all".
+   */
+  domain?: unknown;
+  /** Initial values for records created from this view (see DataForm). */
+  defaults?: Record<string, unknown>;
   order_by?: string[];
   group_by?: string[];
   limit?: number;

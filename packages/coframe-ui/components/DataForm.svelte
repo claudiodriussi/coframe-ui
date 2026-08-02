@@ -44,6 +44,7 @@
     view: FormDescriptor;
     data?: Record<string, unknown>;        // Step A: local data
     recordId?: number | string | null;     // Step C: DB record id (null = new record)
+    defaults?: Record<string, unknown>;    // caller's initial values, create mode only
     trigger?: Record<string, unknown>;
     status?: FormStatus;
     toolbarExtra?: Snippet;
@@ -56,6 +57,7 @@
     view,
     data = {},
     recordId,
+    defaults,
     trigger,
     status,
     toolbarExtra,
@@ -328,9 +330,17 @@
         out[col.name] = raw;                              // scalar (bool/number)
       }
     }
-    // 2) descriptor defaults win (author values: resolve $-tokens, keep literals)
-    const descr = (src?.defaults ?? {}) as Record<string, unknown>;
-    for (const [k, v] of Object.entries(descr)) {
+    // 2) descriptor defaults, then 3) the caller's — from the least to the most
+    // aware of the context: the column knows nothing about it, the form knows
+    // the record, the view that opened the form knows why it is being added.
+    applyDefaults(out, src?.defaults as Record<string, unknown> | undefined);
+    applyDefaults(out, defaults);
+    return out;
+  }
+
+  // Author values: resolve $-tokens, keep literals as they are.
+  function applyDefaults(out: Record<string, unknown>, map: Record<string, unknown> | undefined) {
+    for (const [k, v] of Object.entries(map ?? {})) {
       if (typeof v === 'string' && v.startsWith('$')) {
         const r = resolveToken(v);
         if (r.set) out[k] = r.value;
@@ -338,7 +348,6 @@
         out[k] = v;
       }
     }
-    return out;
   }
 
   async function loadData() {

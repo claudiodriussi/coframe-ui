@@ -110,9 +110,39 @@ export function buildQuery(
     q.group_by = src.group_by;
   }
 
-  if (src.filters) {
-    q.filters = applyTriggerVars(src.filters, trig);
+  const filters = mergeDomain(src, trig);
+  if (filters !== undefined) {
+    q.filters = filters;
   }
 
   return q;
+}
+
+// ── Domain ─────────────────────────────────────────────────────────────────
+// `domain` and `filters` share the querybuilder syntax, so either may be a
+// bare condition, a list of conditions, or {conditions: [...]}.
+
+function conditionsOf(f: unknown): unknown[] | null {
+  if (f === undefined || f === null || f === '') return null;
+  if (Array.isArray(f)) return f.length > 0 ? f : null;
+  if (typeof f === 'object') {
+    const inner = (f as Record<string, unknown>).conditions;
+    if (Array.isArray(inner)) return inner.length > 0 ? inner : null;
+  }
+  return [f];
+}
+
+// Combine the view's domain with its filters. The two go in as sibling groups
+// rather than one flat list: a condition list may open with ['op', 'or'], and
+// concatenating would silently widen the domain to an OR branch.
+export function mergeDomain(
+  src: ViewSource,
+  trig: Record<string, unknown>,
+): unknown | undefined {
+  const domain = conditionsOf(applyTriggerVars(src.domain, trig));
+  if (!domain) {
+    return src.filters ? applyTriggerVars(src.filters, trig) : undefined;
+  }
+  const filters = conditionsOf(applyTriggerVars(src.filters, trig));
+  return { conditions: filters ? [domain, filters] : domain };
 }

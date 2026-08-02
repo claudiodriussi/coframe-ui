@@ -25,6 +25,7 @@
     formId,
     recordId = null,
     data = undefined,
+    defaults = undefined,
     title = '',
     onSaved,
     onCancel,
@@ -32,6 +33,7 @@
     formId: string;
     recordId?: string | number | null;
     data?: Record<string, unknown>;       // Step A: computed row, no DB
+    defaults?: Record<string, unknown>;   // caller's initial values (create mode)
     title?: string;
     onSaved?: (savedData: Record<string, unknown>) => void;
     onCancel?: () => void;
@@ -102,6 +104,7 @@
         view={descriptor}
         {recordId}
         data={data}
+        {defaults}
         onSave={handleSave}
         onCancel={handleCancel}
       />

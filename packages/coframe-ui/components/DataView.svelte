@@ -512,6 +512,8 @@
     stack.push(DataFormView, {
       formId,
       recordId: recordId ?? null,
+      // The view's own defaults: a record added from "Customers" is born one.
+      defaults: isNew ? view.source?.defaults : undefined,
       title: label,
       onSaved: (savedData: Record<string, unknown>) => {
         if (isNew) {
