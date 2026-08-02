@@ -18,11 +18,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = process.env.COFRAME_APP || 'devtest';
 
-// devtest lives in its own root (coframe/devtest/), separate from real
-// app-instances which live under coframe/apps/<app>/ (git-excluded).
-const pluginsDir = app === 'devtest'
-  ? resolve(__dirname, '../../../../coframe/devtest/plugins')
-  : resolve(__dirname, `../../../../coframe/apps/${app}/plugins`);
+// Projects that ship with the workspace have their own root; real app-instances
+// live under coframe/apps/<app>/ (git-excluded) and follow the convention.
+/** @type {Record<string, string>} */
+const WORKSPACE_ROOTS = {
+  devtest: '../../../../coframe/devtest/plugins',
+  demo: '../../../../commons/demo/plugins'
+};
+
+const pluginsDir = resolve(
+  __dirname,
+  WORKSPACE_ROOTS[app] ?? `../../../../coframe/apps/${app}/plugins`
+);
 
 export default {
   // Which project this shell instance is bound to (backend app-instance name).
