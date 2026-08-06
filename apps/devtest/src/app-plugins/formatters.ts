@@ -1,12 +1,9 @@
 /**
- * Auto-discovers and registers all plugin formatter modules.
- *
- * The glob runs here (under src/) so that Vite can reliably resolve
- * the $plugins alias. Import this module once at app startup.
+ * Auto-discovers and registers every plugin formatter module.
+ * Import this module once at app startup.
  */
 
 import { registerFormatters } from '$coframe/formatters/loader';
+import { formatterGlobs } from 'virtual:coframe/plugins';
 
-registerFormatters(
-  import.meta.glob('$plugins/**/formatters.ts', { eager: true }),
-);
+registerFormatters(formatterGlobs);

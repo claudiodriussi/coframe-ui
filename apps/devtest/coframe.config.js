@@ -1,17 +1,8 @@
 /**
- * Coframe build-time configuration.
- * Imported by svelte.config.js and vite.config.ts.
- *
- * When migrating to a different project, only this file needs to change
- * for filesystem paths. Runtime config is in .env.* files.
+ * What this client is: a custom client bound to the devtest app-instance.
+ * Everything else — plugin roots, API prefix and port — is derived from that
+ * app's config.yaml (see ../../apps.config.js).
  */
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { resolveApp } from '../../apps.config.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-export default {
-  // Path to backend plugin components directory.
-  // Plugin .svelte files live here alongside their Python/YAML counterparts.
-  pluginsDir: resolve(__dirname, '../../../../coframe/devtest/plugins')
-};
+export default resolveApp({ app: 'devtest', devPort: 5173 });

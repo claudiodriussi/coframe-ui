@@ -39,9 +39,17 @@ export function createPluginLoaderFromGlob(
   modules: Record<string, () => Promise<any>>,
 ): PluginLoader {
   const components: Record<string, ComponentLoaderFn> = {};
+  const seen: Record<string, string> = {};
   for (const [path, loader] of Object.entries(modules)) {
     const id = pathToComponentId(path);
-    if (id) components[id] = loader;
+    if (!id) continue;
+    // With several plugin roots the same id can come from two different files:
+    // the last root declared wins, but silently would be the wrong way to lose.
+    if (seen[id] && seen[id] !== path) {
+      console.warn(`[PluginLoader] Duplicate id '${id}': ${seen[id]} shadowed by ${path}`);
+    }
+    seen[id] = path;
+    components[id] = loader;
   }
   return createPluginLoader(components);
 }
