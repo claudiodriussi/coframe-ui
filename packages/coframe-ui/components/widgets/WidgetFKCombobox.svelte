@@ -7,7 +7,8 @@
    *
    * field.foreign_key: { target: string; field: string }  — from auto-form
    * serverConfig.tables[target].display_field             — label column
-   * serverConfig.tables[target].search_fields             — searchable columns
+   * The lookup sends the typed text as the query's `search` key: which columns
+   * it matches is the target table's own answer, resolved server-side.
    */
   import { untrack, getContext } from 'svelte';
   import { _ } from '../../i18n';
@@ -34,7 +35,12 @@
   let fkPkField = $derived((field.foreign_key as { target?: string; field?: string } | undefined)?.field ?? 'id');
 
   let displayField = $derived(fkTarget ? serverConfig.tables[fkTarget]?.display_field : undefined);
-  let searchFields = $derived(fkTarget ? (serverConfig.tables[fkTarget]?.search_fields ?? []) : []);
+  // Whether the target can be searched at all; *what* is searched is the
+  // server's answer, sent back through the `search` key of the query.
+  let searchable = $derived.by(() => {
+    const table = fkTarget ? serverConfig.tables[fkTarget] : undefined;
+    return !!table && ((table.search_fields?.length ?? 0) > 0 || !!table.search_pk);
+  });
 
   let currentLabel = $state(untrack(() => ''));
   let query        = $state(untrack(() => ''));
@@ -108,23 +114,23 @@
     debounceTimer = setTimeout(() => _search(q), 300);
   }
 
+  // `search` sends the text and nothing else: which columns it looks at, and
+  // whether the text can also be a key matched exactly, is the table's own
+  // answer (DATA_MODEL.md §4.4) and the same one the quick search on a list
+  // gets. Building the OR here made this combobox single-field and left it
+  // unable to find a record by its number.
   async function _search(q: string) {
     const df = displayField;
-    const sf = searchFields;
-    if (!fkTarget || !df || sf.length === 0) return;
+    if (!fkTarget || !df || !searchable) return;
 
     searching = true;
     try {
-      const filterConditions = sf.length === 1
-        ? { column: sf[0], op: 'ilike', value: `%${q}%` }
-        : { op: 'or', conditions: sf.map(f => ({ column: f, op: 'ilike', value: `%${q}%` })) };
-
       const res = await api.endpoint('query', {
         format: 'records',
         query: {
           table: fkTarget,
           columns: [fkPkField, df],
-          filters: { conditions: filterConditions },
+          search: q,
           limit: 10,
         },
       });

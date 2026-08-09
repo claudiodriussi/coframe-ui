@@ -136,8 +136,14 @@ export interface TableInfo {
   mixins?: string[];
   /** Column to show as label in FK comboboxes (resolved server-side). */
   display_field?: string;
-  /** Real columns used for SQL LIKE search in FK comboboxes. */
+  /**
+   * Columns a text search matches with ILIKE, and the key it matches exactly.
+   * Resolved server-side (DATA_MODEL.md §4.4) and expanded there too: a caller
+   * sends the text as `search` and never has to build the OR itself. What they
+   * are good for here is knowing whether the table is searchable at all.
+   */
   search_fields?: string[];
+  search_pk?: string;
 }
 
 export type TableRegistry = Record<string, TableInfo>;

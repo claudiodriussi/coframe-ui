@@ -60,6 +60,7 @@ registerTranslations('it', {
   'Select…':                  'Seleziona…',
   'Select':                   'Seleziona',
   'Clear selection':          'Cancella selezione',
+  'Clear search':             'Svuota la ricerca',
 
   // msgbox
   'Confirm':                  'Conferma',

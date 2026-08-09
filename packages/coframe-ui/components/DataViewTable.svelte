@@ -72,6 +72,7 @@
   export function setHeaderFilter(field: string, value: unknown)               { tableRef?.setHeaderFilter(field, value); }
   export function setSort(sorters: Array<{ field: string; dir: string }>)      { tableRef?.setSort(sorters); }
   export function selectRowsByIds(ids: unknown[])                              { tableRef?.selectRowsByIds(ids); }
+  export function clearSelection()                                             { tableRef?.clearSelection(); }
   export function download(format: 'csv' | 'json', filename: string)          { tableRef?.download(format, filename); }
   export async function addRows(newRows: any[]): Promise<number>               { return tableRef?.addRows(newRows) ?? 0; }
   export function focusRowById(id: unknown)                                    { tableRef?.focusRowById(id); }

@@ -33,6 +33,8 @@
     hasTriggerVars,
     buildQuery,
   } from './dataview.query';
+  import type { QueryExtras } from './dataview.query';
+  import type { RuleRow } from './dataview.rules';
 
   // ── Types (re-exported for consumers) ─────────────────────────────────────
   export type {
@@ -62,6 +64,10 @@
     rowCount: number;
     selectMode: boolean;
     selectedIds: unknown[];
+    // The chosen set: restored before the first fetch, so a reload asks the
+    // server the same question rather than showing a wider list for a moment.
+    search?: string;
+    rules?: RuleRow[];
   }
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -121,6 +127,13 @@
   let waitingForTrigger = $state(false);
   let filterMode = $state(savedState?.filterMode ?? false);
   let selectMode = $state(savedState?.selectMode ?? false);
+  // ── The chosen set ─────────────────────────────────────────────────────────
+  // What the user adds to the view's own conditions. Both decide *which* rows,
+  // so changing either restarts the fetch from offset 0, recomputes the counts
+  // and drops the selection: a tick means "this row among the ones I am looking
+  // at", and that meaning does not survive a different set.
+  let quickSearch = $state(savedState?.search ?? '');
+  let ruleRows = $state<RuleRow[]>(savedState?.rules ?? []);
   let filteredCount = $state<number | null>(null);
   let selectedCount = $state(0);
   let tabulatorReady = $state(false);
@@ -144,6 +157,18 @@
   const pkField = $derived(
     serverConfig.tables[view.source?.model ?? '']?.pk_fields?.[0] ?? 'id'
   );
+  const queryExtras = $derived<QueryExtras>({ rules: ruleRows, search: quickSearch });
+
+  // The box appears only where it can answer: the search is expanded from what
+  // the table declares searchable, and a table that declares nothing refuses it
+  // rather than returning everything. Rows loaded from a prop or an endpoint
+  // have no table behind them at all.
+  const quickSearchAvailable = $derived.by(() => {
+    if (propData !== undefined || !view.source?.model) return false;
+    if ((view.navigator as NavigatorConfig | undefined)?.hide?.includes('quick_search')) return false;
+    const table = serverConfig.tables[view.source.model as string];
+    return !!table && ((table.search_fields?.length ?? 0) > 0 || !!table.search_pk);
+  });
   const allowViews = $derived(view.allow_views ?? []);
   const selectable = $derived(selectMode || view.policy?.selection === true);
   const isTreeMode = $derived(activeViewType === 'tree');
@@ -185,6 +210,8 @@
       rowCount,
       selectMode,
       selectedIds: tableRef.getSelectedData().map((r: any) => r[pkField]).filter((id: any) => id != null),
+      search: quickSearch,
+      rules: ruleRows,
     };
     try { localStorage.setItem(getStateKey(), JSON.stringify(state)); } catch (_) {}
   }
@@ -323,6 +350,9 @@
     void view.columns;
     const pd = propData;
     const trig = trigger ?? {};
+    // Read here, before any await: this is what makes a new rule or a new
+    // search reload the view.
+    const extras = queryExtras;
     const isCollapsed = collapsed;
     const viewType = view.type;
     const treeCfg = view.tree;
@@ -353,7 +383,7 @@
     waitingForTrigger = false;
 
     if (src?.model) {
-      const q = buildQuery(src, view.columns, trig);
+      const q = buildQuery(src, view.columns, trig, extras);
 
       loading = true;
       error = null;
@@ -433,7 +463,7 @@
     const src = view.source;
     if (!src?.model) return;
 
-    const q = buildQuery(src, view.columns, trigger ?? {});
+    const q = buildQuery(src, view.columns, trigger ?? {}, queryExtras);
     q.offset = rowCount;
     if (n > 0) q.limit = n;
 
@@ -479,6 +509,39 @@
   function toggleSelect() {
     selectMode = !selectMode;
     saveViewState();
+  }
+
+  // ── Changing the set ───────────────────────────────────────────────────────
+
+  /**
+   * Apply a change of set. The reload itself is the effect on loadData; what
+   * has to happen here is dropping the selection, because keeping it would
+   * leave ids selected that no longer appear — a command about to be applied
+   * to rows nobody can see.
+   *
+   * Sorting does *not* go through here: it changes the order, not the
+   * membership, and losing the ticks would be a pointless nuisance.
+   */
+  function changeSet(apply: () => void) {
+    apply();
+    tableRef?.clearSelection();
+    selectedCount = 0;
+    _activeRowData = null;
+    saveViewState();
+  }
+
+  function handleSearch(text: string) {
+    if (text === quickSearch) return;
+    changeSet(() => { quickSearch = text; });
+  }
+
+  /** The rule editor's way in — its stack page returns here (querybuilder.md §7). */
+  export function setRules(rows: RuleRow[]) {
+    changeSet(() => { ruleRows = rows; });
+  }
+
+  export function getRules(): RuleRow[] {
+    return ruleRows;
   }
 
   // ── Navigator CRUD ─────────────────────────────────────────────────────────
@@ -673,6 +736,9 @@
       onExport={handleExport}
       onRefresh={reloadData}
       onLoadMore={loadMore}
+      searchable={quickSearchAvailable}
+      searchValue={quickSearch}
+      onSearch={handleSearch}
     />
   {/if}
 

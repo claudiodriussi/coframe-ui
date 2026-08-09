@@ -7,6 +7,18 @@
  */
 
 import type { ViewSource, ViewColumn } from './dataview.types';
+import { serializeRuleSet, toBlocks, type RuleRow } from './dataview.rules';
+
+/**
+ * What the user adds to the view's own query: the rules they built and the text
+ * they typed. Both decide *which* rows, so both reload from offset 0.
+ */
+export interface QueryExtras {
+  /** The rule editor's flat list; blocks and payload are derived from it. */
+  rules?: RuleRow[];
+  /** Quick search text — expanded server-side over the table's search fields. */
+  search?: string;
+}
 
 // ── Field key extraction ───────────────────────────────────────────────────
 // columns.field may be a plain name ("title"), a Model.field notation
@@ -84,6 +96,7 @@ export function buildQuery(
   src: ViewSource,
   columns: ViewColumn[] | undefined,
   trig: Record<string, unknown>,
+  extras?: QueryExtras,
 ): Record<string, unknown> {
   const q: Record<string, unknown> = { table: src.model };
 
@@ -110,9 +123,21 @@ export function buildQuery(
     q.group_by = src.group_by;
   }
 
-  const filters = mergeDomain(src, trig);
+  const rules = extras?.rules?.length
+    ? serializeRuleSet(toBlocks(extras.rules))
+    : undefined;
+
+  const filters = mergeDomain(src, trig, rules);
   if (filters !== undefined) {
     q.filters = filters;
+  }
+
+  // The quick search travels as a key of its own: the server expands it over
+  // the table's search fields and ANDs it, so it can only narrow the filters,
+  // and emptying the box leaves the rules untouched.
+  const search = extras?.search?.trim();
+  if (search) {
+    q.search = search;
   }
 
   return q;
@@ -126,23 +151,39 @@ function conditionsOf(f: unknown): unknown[] | null {
   if (f === undefined || f === null || f === '') return null;
   if (Array.isArray(f)) return f.length > 0 ? f : null;
   if (typeof f === 'object') {
-    const inner = (f as Record<string, unknown>).conditions;
-    if (Array.isArray(inner)) return inner.length > 0 ? inner : null;
+    const o = f as Record<string, unknown>;
+    // A wrapper is unwrapped into the group's contents — but {op: 'or',
+    // conditions: [...]} is one condition that carries its own boundary, and
+    // unwrapping it would spill its branches into the enclosing AND.
+    if ('conditions' in o && !('op' in o)) {
+      const inner = o.conditions;
+      if (Array.isArray(inner)) return inner.length > 0 ? inner : null;
+      return inner === undefined || inner === null ? null : [inner];
+    }
   }
   return [f];
 }
 
-// Combine the view's domain with its filters. The two go in as sibling groups
-// rather than one flat list: a condition list may open with ['op', 'or'], and
-// concatenating would silently widen the domain to an OR branch.
+// Combine what the view declares with what the user built: the domain, the
+// descriptor's own filters, and the rules from the editor. They go in as
+// sibling groups rather than one flat list — a condition list may open with
+// ['op', 'or'], and concatenating would make the domain one more branch of that
+// disjunction, widening the view instead of narrowing it.
+//
+// Three groups also means three independent lifetimes: clearing the rules
+// leaves the view's own conditions where they were.
 export function mergeDomain(
   src: ViewSource,
   trig: Record<string, unknown>,
+  rules?: unknown[],
 ): unknown | undefined {
-  const domain = conditionsOf(applyTriggerVars(src.domain, trig));
-  if (!domain) {
-    return src.filters ? applyTriggerVars(src.filters, trig) : undefined;
-  }
-  const filters = conditionsOf(applyTriggerVars(src.filters, trig));
-  return { conditions: filters ? [domain, filters] : domain };
+  const groups = [
+    conditionsOf(applyTriggerVars(src.domain, trig)),
+    conditionsOf(applyTriggerVars(src.filters, trig)),
+    rules && rules.length > 0 ? rules : null,
+  ].filter((g): g is unknown[] => g !== null);
+
+  if (groups.length === 0) return undefined;
+  if (groups.length === 1) return { conditions: groups[0] };
+  return { conditions: groups };
 }

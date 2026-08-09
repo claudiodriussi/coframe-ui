@@ -52,6 +52,11 @@
     onRefresh = undefined as (() => void) | undefined,
     onLoadMore = undefined as ((n: number) => void) | undefined,
     onCommand = undefined as ((cmd: CommandItem) => void) | undefined,
+    // Quick search — the everyday gesture, so it lives in the row that already
+    // exists rather than in one of its own (querybuilder.md §7).
+    searchable = false,
+    searchValue = '',
+    onSearch = undefined as ((text: string) => void) | undefined,
   }: {
     config?: NavigatorConfig;
     filterMode?: boolean;
@@ -75,6 +80,9 @@
     onRefresh?: () => void;
     onLoadMore?: (n: number) => void;
     onCommand?: (cmd: CommandItem) => void;
+    searchable?: boolean;
+    searchValue?: string;
+    onSearch?: (text: string) => void;
   } = $props();
 
   // ── Visibility resolution ──────────────────────────────────────────────────
@@ -114,6 +122,52 @@
   // ── Load more dropdown ─────────────────────────────────────────────────────
 
   let loadMoreOpen = $state(false);
+
+  // ── Quick search ───────────────────────────────────────────────────────────
+  // Typing is local; only the debounced value leaves, because every emission is
+  // a round trip and a new set. Enter sends at once, Escape clears.
+
+  const SEARCH_DEBOUNCE_MS = 300;
+
+  let searchText = $state(searchValue);
+  let emitted = searchValue;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Follow the value from outside (a restored view, a reset) without undoing
+  // what the user is typing: only a value we did not send ourselves wins.
+  $effect(() => {
+    if (searchValue !== emitted) {
+      emitted = searchValue;
+      searchText = searchValue;
+    }
+  });
+
+  function emitSearch(text: string) {
+    clearTimeout(searchTimer);
+    emitted = text;
+    onSearch?.(text);
+  }
+
+  function handleSearchInput(e: Event) {
+    searchText = (e.target as HTMLInputElement).value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => emitSearch(searchText), SEARCH_DEBOUNCE_MS);
+  }
+
+  function handleSearchKey(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      emitSearch(searchText);
+    } else if (e.key === 'Escape' && searchText) {
+      e.stopPropagation();   // the stack listens for Escape: clearing is not leaving
+      searchText = '';
+      emitSearch('');
+    }
+  }
+
+  function clearSearch() {
+    searchText = '';
+    emitSearch('');
+  }
 </script>
 
 {#if loadMoreOpen}
@@ -271,6 +325,27 @@
 
   </div>
 
+  <!-- ── Quick search — elastic filler, no row of its own ───────────────── -->
+  {#if searchable}
+    <div class="cf-nav-search">
+      <Search size={13} class="cf-nav-search-icon" aria-hidden="true" />
+      <input
+        type="text"
+        class="cf-nav-search-input"
+        placeholder={_('Search…')}
+        value={searchText}
+        oninput={handleSearchInput}
+        onkeydown={handleSearchKey}
+        aria-label={_('Search…')}
+      />
+      {#if searchText}
+        <button class="cf-nav-search-clear" title={_('Clear search')} onclick={clearSearch}>
+          <X size={12} />
+        </button>
+      {/if}
+    </div>
+  {/if}
+
   <!-- ── Right group: count + spinner ──────────────────────────────────── -->
   <div class="cf-nav-right">
     {#if loading}
@@ -309,6 +384,56 @@
     align-items: center;
     gap: 0.5rem;
     flex-shrink: 0;
+  }
+
+  /* ── Quick search ────────────────────────────────────────────────────────
+     Elastic filler between the buttons and the counts: it takes the width
+     nobody else wants and no height at all, so a view without a search pays
+     nothing for the possibility of one. */
+
+  .cf-nav-search {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 1 1 auto;
+    min-width: 4rem;
+    max-width: 22rem;
+    margin: 0 0.4rem;
+    padding: 0 0.35rem;
+    height: 1.45rem;
+    border: 1px solid var(--cf-border-input);
+    border-radius: 0.25rem;
+    background: var(--cf-bg);
+    color: var(--cf-text-subtle);
+  }
+
+  .cf-nav-search:focus-within {
+    border-color: var(--cf-accent, #3b82f6);
+  }
+
+  .cf-nav-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: none;
+    color: var(--cf-text);
+    font-size: 0.72rem;
+    line-height: 1.2;
+  }
+
+  .cf-nav-search-clear {
+    display: inline-flex;
+    align-items: center;
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--cf-text-subtle);
+    cursor: pointer;
+  }
+
+  .cf-nav-search-clear:hover {
+    color: var(--cf-text);
   }
 
   /* ── Buttons ─────────────────────────────────────────────────────────── */
