@@ -124,14 +124,16 @@
   let loadMoreOpen = $state(false);
 
   // ── Quick search ───────────────────────────────────────────────────────────
-  // Typing is local; only the debounced value leaves, because every emission is
-  // a round trip and a new set. Enter sends at once, Escape clears.
-
-  const SEARCH_DEBOUNCE_MS = 300;
+  // Typing is local: the query leaves on Enter, never while typing. Every
+  // emission is an ILIKE over several columns of a table that may hold a
+  // million rows, and running one at each pause spends it on text the user has
+  // not finished thinking. It also makes the box editable — clear it, retype,
+  // correct a letter — without a set changing underneath.
+  //
+  // Escape and the × clear it and ask for the whole set back: one query, meant.
 
   let searchText = $state(searchValue);
   let emitted = searchValue;
-  let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Follow the value from outside (a restored view, a reset) without undoing
   // what the user is typing: only a value we did not send ourselves wins.
@@ -143,20 +145,17 @@
   });
 
   function emitSearch(text: string) {
-    clearTimeout(searchTimer);
     emitted = text;
     onSearch?.(text);
   }
 
   function handleSearchInput(e: Event) {
     searchText = (e.target as HTMLInputElement).value;
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => emitSearch(searchText), SEARCH_DEBOUNCE_MS);
   }
 
   function handleSearchKey(e: KeyboardEvent) {
     if (e.key === 'Enter') {
-      emitSearch(searchText);
+      if (searchText !== emitted) emitSearch(searchText);
     } else if (e.key === 'Escape' && searchText) {
       e.stopPropagation();   // the stack listens for Escape: clearing is not leaving
       searchText = '';
@@ -166,7 +165,7 @@
 
   function clearSearch() {
     searchText = '';
-    emitSearch('');
+    if (emitted !== '') emitSearch('');
   }
 </script>
 
@@ -328,7 +327,14 @@
   <!-- ── Quick search — elastic filler, no row of its own ───────────────── -->
   {#if searchable}
     <div class="cf-nav-search">
-      <Search size={13} class="cf-nav-search-icon" aria-hidden="true" />
+      <button
+        class="cf-nav-search-go"
+        title={_('Search (Enter)')}
+        aria-label={_('Search (Enter)')}
+        onclick={() => { if (searchText !== emitted) emitSearch(searchText); }}
+      >
+        <Search size={13} />
+      </button>
       <input
         type="text"
         class="cf-nav-search-input"
@@ -422,7 +428,8 @@
     line-height: 1.2;
   }
 
-  .cf-nav-search-clear {
+  .cf-nav-search-clear,
+  .cf-nav-search-go {
     display: inline-flex;
     align-items: center;
     border: none;
@@ -432,7 +439,8 @@
     cursor: pointer;
   }
 
-  .cf-nav-search-clear:hover {
+  .cf-nav-search-clear:hover,
+  .cf-nav-search-go:hover {
     color: var(--cf-text);
   }
 

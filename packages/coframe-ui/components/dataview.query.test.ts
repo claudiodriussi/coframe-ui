@@ -85,6 +85,37 @@ describe('quick search', () => {
   });
 });
 
+describe('order', () => {
+  it('opens on the order the descriptor asked for', () => {
+    const q = buildQuery(src({ order_by: ['title', '-price'] }), undefined, {});
+    expect(q.order_by).toEqual(['title', ['price', 'desc']]);
+  });
+
+  it('lets the query replace it — the descriptor only says how the list opens', () => {
+    const q = buildQuery(src({ order_by: ['title'] }), undefined, {},
+      { order: [{ field: 'city', dir: 'desc' }] });
+    expect(q.order_by).toEqual([['city', 'desc']]);
+  });
+
+  it('keeps several sort levels in the order they were set', () => {
+    const q = buildQuery(src(), undefined, {}, {
+      order: [{ field: 'city', dir: 'asc' }, { field: 'name', dir: 'desc' }],
+    });
+    expect(q.order_by).toEqual(['city', ['name', 'desc']]);
+  });
+
+  it('falls back to the descriptor when the query asks for no order', () => {
+    const q = buildQuery(src({ order_by: ['title'] }), undefined, {}, { order: [] });
+    expect(q.order_by).toEqual(['title']);
+  });
+
+  it('is not a filter: it leaves the conditions untouched', () => {
+    const q = buildQuery(src({ domain: [{ active: true }] }), undefined, {},
+      { order: [{ field: 'name', dir: 'asc' }] });
+    expect(q.filters).toEqual({ conditions: [{ active: true }] });
+  });
+});
+
 describe('trigger variables still apply', () => {
   it('substitutes inside the domain before grouping', () => {
     const q = buildQuery(

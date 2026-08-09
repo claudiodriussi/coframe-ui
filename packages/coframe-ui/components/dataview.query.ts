@@ -18,6 +18,16 @@ export interface QueryExtras {
   rules?: RuleRow[];
   /** Quick search text — expanded server-side over the table's search fields. */
   search?: string;
+  /**
+   * The order the query asks the server for, replacing the descriptor's own
+   * `order_by` — which only says how the list opens.
+   *
+   * It belongs to the query definition, not to the grid: clicking a column
+   * header sorts what is loaded, locally and instantly, and must not cost a
+   * fetch and a reset of the pagination. The rule editor is where an order over
+   * the *whole* set is asked for, deliberately, along with the conditions.
+   */
+  order?: Array<{ field: string; dir: 'asc' | 'desc' }>;
 }
 
 // ── Field key extraction ───────────────────────────────────────────────────
@@ -113,7 +123,9 @@ export function buildQuery(
   }
 
   // order_by: "-field" prefix → ["field", "desc"]
-  if (src.order_by && src.order_by.length > 0) {
+  if (extras?.order?.length) {
+    q.order_by = extras.order.map(s => (s.dir === 'desc' ? [s.field, 'desc'] : s.field));
+  } else if (src.order_by && src.order_by.length > 0) {
     q.order_by = src.order_by.map(f =>
       typeof f === 'string' && f.startsWith('-') ? [f.slice(1), 'desc'] : f,
     );

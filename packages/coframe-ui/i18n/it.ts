@@ -61,6 +61,7 @@ registerTranslations('it', {
   'Select':                   'Seleziona',
   'Clear selection':          'Cancella selezione',
   'Clear search':             'Svuota la ricerca',
+  'Search (Enter)':           'Cerca (Invio)',
 
   // msgbox
   'Confirm':                  'Conferma',
