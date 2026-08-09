@@ -9,9 +9,12 @@
     "build": "pnpm --filter devtest build",
     "dev:shell": "pnpm --filter shell dev",
     "dev:demo": "pnpm --filter shell dev:demo",
-    "build:demo": "COFRAME_APP=demo pnpm --filter shell build"
+    "build:demo": "COFRAME_APP=demo pnpm --filter shell build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
+    "vitest": "^4.1.10",
     "yaml": "^2.9.0"
   }
 }
