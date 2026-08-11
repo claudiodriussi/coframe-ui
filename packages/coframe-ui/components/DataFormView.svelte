@@ -65,8 +65,15 @@
     }
   }
 
-  // Load on mount
-  $effect(() => { loadDescriptor(); });
+  // Keyed on what it fetches, like every other fetching effect: re-running is
+  // harmless here only because of the cache above, and relying on that is
+  // relying on an accident.
+  let loadedFormId: string | null = null;
+  $effect(() => {
+    if (formId === loadedFormId) return;
+    loadedFormId = formId;
+    loadDescriptor();
+  });
 
   function handleSave(savedData: Record<string, unknown>) {
     onSaved?.(savedData);

@@ -37,7 +37,16 @@
     }
   }
 
+  // Fetch when the id changes, and only then. Without the guard the effect
+  // re-runs whenever the parent re-renders — which the stack does on every push
+  // and pop — and `load` starts by clearing `panel`, so the whole subtree is
+  // destroyed and rebuilt. Everything the view was holding goes with it: the
+  // rules being applied, the quick search, the loaded pages, the selection. It
+  // looked like a reload; it was a different component each time.
+  let loadedId: string | null = null;
   $effect(() => {
+    if (panelId === loadedId) return;
+    loadedId = panelId;
     load(panelId);
   });
 </script>

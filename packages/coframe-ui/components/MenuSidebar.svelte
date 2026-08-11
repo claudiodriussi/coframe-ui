@@ -73,7 +73,14 @@
     stack.push(PanelPage, { panelId: node.panel });
   }
 
+  // Keyed on what it fetches: an effect re-runs whenever anything it read
+  // changes, which with spread props includes "the parent re-rendered". Here a
+  // spurious run would re-expand every group the user had collapsed, undoing a
+  // gesture with no visible cause.
+  let loadedRoot: string | null = null;
   $effect(() => {
+    if (rootId === loadedRoot) return;
+    loadedRoot = rootId;
     load(rootId);
   });
 </script>
