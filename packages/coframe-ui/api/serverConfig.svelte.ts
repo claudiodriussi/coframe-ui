@@ -125,6 +125,9 @@ export interface TableColumnInfo {
   default?: unknown;
   /** Deferred default: filled server-side at save, never prefilled in a form. */
   deferred?: boolean;
+  /** Declared on the column or inherited from its type. */
+  index?: boolean;
+  unique?: boolean;
   foreign_key?: { target: string; field: string };
   [key: string]: unknown;
 }
@@ -144,6 +147,12 @@ export interface TableInfo {
    */
   search_fields?: string[];
   search_pk?: string;
+  /**
+   * Compound indexes as declared in the plugin model. Used to suggest an order
+   * the database can serve cheaply — a priority in the order combo, never a
+   * restriction on which columns may be sorted.
+   */
+  indexes?: Array<{ name?: string; columns: string[] }>;
 }
 
 export type TableRegistry = Record<string, TableInfo>;

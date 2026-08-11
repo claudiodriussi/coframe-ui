@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  toBlocks, toRows, duplicateBlock, isComplete,
-  serializeRule, serializeRuleSet, operatorsFor,
+  toBlocks, toRows, blockRowIndices, duplicateBlock, isComplete,
+  serializeRule, serializeRuleSet, operatorsFor, operatorSymbol, blockConflicts,
   type Rule, type RuleRow,
 } from './dataview.rules';
 
@@ -85,10 +85,12 @@ describe('completeness', () => {
     expect(isComplete(r('a', 'eq', false))).toBe(true);
   });
 
-  it('wants exactly two bounds for between', () => {
+  it('takes one bound as an open interval, and none as a row switched off', () => {
     expect(isComplete(r('a', 'between', [1, 10]))).toBe(true);
-    expect(isComplete(r('a', 'between', [1]))).toBe(false);
-    expect(isComplete(r('a', 'between', [1, null]))).toBe(false);
+    expect(isComplete(r('a', 'between', [1]))).toBe(true);
+    expect(isComplete(r('a', 'between', [null, 10]))).toBe(true);
+    expect(isComplete(r('a', 'between', [null, null]))).toBe(false);
+    expect(isComplete(r('a', 'between', []))).toBe(false);
     expect(isComplete(r('a', 'between', 1))).toBe(false);
   });
 
@@ -121,6 +123,13 @@ describe('serializeRule', () => {
   it('spreads the two bounds of between', () => {
     expect(serializeRule(r('year', 'between', [2020, 2024])))
       .toEqual({ year: ['between', 2020, 2024] });
+  });
+
+  it('degrades an interval missing one end into the comparison it means', () => {
+    expect(serializeRule(r('year', 'between', [2020, null]))).toEqual({ year: ['ge', 2020] });
+    expect(serializeRule(r('year', 'between', [2020]))).toEqual({ year: ['ge', 2020] });
+    expect(serializeRule(r('year', 'between', [null, 2024]))).toEqual({ year: ['le', 2024] });
+    expect(serializeRule(r('year', 'between', ['', 2024]))).toEqual({ year: ['le', 2024] });
   });
 
   it('passes the list of in as one value', () => {
@@ -193,12 +202,24 @@ describe('serializeRuleSet', () => {
 
 describe('operatorsFor', () => {
   it('answers per primitive', () => {
-    expect(operatorsFor('boolean')).toEqual(['istrue', 'isfalse']);
     expect(operatorsFor('number')).toContain('between');
+    expect(operatorsFor('number')).not.toContain('contains');
+    expect(operatorsFor('date')).not.toContain('contains');
   });
 
-  it('keeps foreign keys to identity — no contains on a display', () => {
-    expect(operatorsFor('fk')).toEqual(['eq', 'in', 'empty', 'notempty']);
+  it('asks a boolean one question, leaving room for "not asking"', () => {
+    // Two operators can say true and false but never "all": the third answer
+    // is an empty value, which is a switched off row like everywhere else.
+    expect(operatorsFor('boolean')).toEqual(['eq', 'empty', 'notempty']);
+    expect(isComplete(r('ok', 'eq', false))).toBe(true);
+    expect(isComplete(r('ok', 'eq', undefined))).toBe(false);
+  });
+
+  it('reads the key of a foreign key, never its display', () => {
+    // A range over stored codes is the selection mask of every gestionale;
+    // a "contains" would run on a display that presentation settings compose.
+    expect(operatorsFor('fk')).toEqual(['eq', 'in', 'between', 'empty', 'notempty']);
+    expect(operatorsFor('fk')).not.toContain('contains');
   });
 
   it('falls back to the string operators for an unknown primitive', () => {
@@ -207,5 +228,118 @@ describe('operatorsFor', () => {
 
   it('lets a schema type override the list', () => {
     expect(operatorsFor('string', ['eq'])).toEqual(['eq']);
+  });
+});
+
+describe('blockRowIndices', () => {
+  it('carries the row indices of each block', () => {
+    const rows = [
+      row(r('a', 'eq', 1)),
+      row(r('b', 'eq', 2)),
+      row(r('c', 'eq', 3), 'or'),
+    ];
+    expect(blockRowIndices(rows)).toEqual([[0, 1], [2]]);
+  });
+
+  it('agrees with toBlocks on the shape', () => {
+    const rows = [row(r('a', 'eq', 1)), row(r('b', 'eq', 2), 'or'), row(r('c', 'eq', 3))];
+    expect(blockRowIndices(rows).map(b => b.length))
+      .toEqual(toBlocks(rows).map(b => b.length));
+  });
+});
+
+describe('operatorSymbol', () => {
+  it('uses the symbol where a convention exists', () => {
+    expect(operatorSymbol('eq')).toBe('=');
+    expect(operatorSymbol('ne')).toBe('≠');
+    expect(operatorSymbol('ge')).toBe('≥');
+    expect(operatorSymbol('between')).toBe('><');
+  });
+
+  it('keeps the word where inventing a symbol would have to be learnt', () => {
+    expect(operatorSymbol('contains')).toBe('contains');
+    expect(operatorSymbol('in')).toBe('is one of');
+    expect(operatorSymbol('empty')).toBe('is empty');
+  });
+});
+
+describe('blockConflicts', () => {
+  const conflict = (block: Rule[]) => blockConflicts(block).map(c => c.reason);
+
+  it('sees two different values demanded of one field', () => {
+    expect(conflict([r('a', 'eq', 5), r('a', 'eq', 7)])).toEqual(['distinct-values']);
+  });
+
+  it('says nothing when the two values are the same', () => {
+    expect(conflict([r('a', 'eq', 5), r('a', 'eq', 5)])).toEqual([]);
+    expect(conflict([r('a', 'eq', 5), r('a', 'eq', '5')])).toEqual([]);
+  });
+
+  it('leaves other fields alone', () => {
+    expect(conflict([r('a', 'eq', 5), r('b', 'eq', 7)])).toEqual([]);
+  });
+
+  it('sees two value lists that share nothing', () => {
+    expect(conflict([r('p', 'in', ['TV', 'UD']), r('p', 'in', ['VE'])]))
+      .toEqual(['distinct-values']);
+    expect(conflict([r('p', 'in', ['TV', 'UD']), r('p', 'in', ['UD', 'VE'])])).toEqual([]);
+  });
+
+  it('sees a value outside a list, and a list outside a range', () => {
+    expect(conflict([r('p', 'eq', 'VE'), r('p', 'in', ['TV', 'UD'])]))
+      .toEqual(['distinct-values']);
+    expect(conflict([r('n', 'in', [1, 2]), r('n', 'ge', 10)]))
+      .toEqual(['value-outside-bounds']);
+    expect(conflict([r('n', 'in', [1, 20]), r('n', 'ge', 10)])).toEqual([]);
+  });
+
+  it('sees disjoint bounds', () => {
+    expect(conflict([r('n', 'le', 10), r('n', 'ge', 20)])).toEqual(['disjoint-bounds']);
+    expect(conflict([r('n', 'between', [1, 5]), r('n', 'between', [8, 9])]))
+      .toEqual(['disjoint-bounds']);
+  });
+
+  it('keeps the interval that two bounds actually describe', () => {
+    expect(conflict([r('n', 'ge', 5), r('n', 'le', 10)])).toEqual([]);
+    expect(conflict([r('n', 'ge', 10), r('n', 'le', 10)])).toEqual([]);
+  });
+
+  it('counts a bound that excludes the only value left', () => {
+    expect(conflict([r('n', 'gt', 10), r('n', 'le', 10)])).toEqual(['disjoint-bounds']);
+  });
+
+  it('reads an open interval as the comparison it means', () => {
+    expect(conflict([r('n', 'between', [20, null]), r('n', 'le', 10)]))
+      .toEqual(['disjoint-bounds']);
+  });
+
+  it('sees that a NULL satisfies no comparison', () => {
+    expect(conflict([r('a', 'empty'), r('a', 'eq', 5)])).toEqual(['null-and-value']);
+    expect(conflict([r('a', 'empty'), r('a', 'contains', 'x')])).toEqual(['null-and-value']);
+    expect(conflict([r('a', 'empty'), r('a', 'notempty')])).toEqual(['null-and-value']);
+    expect(conflict([r('a', 'empty'), r('a', 'empty')])).toEqual([]);
+  });
+
+  it('sees a boolean asked to be both', () => {
+    expect(conflict([r('ok', 'istrue'), r('ok', 'isfalse')])).toEqual(['distinct-values']);
+  });
+
+  it('keeps quiet where deciding cheaply is not possible', () => {
+    expect(conflict([r('a', 'contains', 'ross'), r('a', 'contains', 'bianchi')])).toEqual([]);
+    expect(conflict([r('a', 'eq', 5), r('a', 'ne', 7)])).toEqual([]);
+    expect(conflict([r('a', 'contains', 'ross'), r('a', 'notempty')])).toEqual([]);
+  });
+
+  it('says nothing about values it cannot compare', () => {
+    expect(conflict([r('d', 'ge', 5), r('d', 'le', 'abc')])).toEqual([]);
+  });
+
+  it('ignores rules the user has not finished', () => {
+    expect(conflict([r('a', 'eq', 5), r('a', 'eq')])).toEqual([]);
+  });
+
+  it('reports the pair it found', () => {
+    const found = blockConflicts([r('a', 'eq', 1), r('b', 'eq', 2), r('a', 'eq', 3)]);
+    expect(found).toEqual([{ a: 0, b: 2, field: 'a', reason: 'distinct-values' }]);
   });
 });

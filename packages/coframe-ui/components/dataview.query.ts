@@ -13,6 +13,12 @@ import { serializeRuleSet, toBlocks, type RuleRow } from './dataview.rules';
  * What the user adds to the view's own query: the rules they built and the text
  * they typed. Both decide *which* rows, so both reload from offset 0.
  */
+/** One level of ordering, as the editor's order row produces it. */
+export interface OrderSpec {
+  field: string;
+  dir: 'asc' | 'desc';
+}
+
 export interface QueryExtras {
   /** The rule editor's flat list; blocks and payload are derived from it. */
   rules?: RuleRow[];
@@ -27,7 +33,7 @@ export interface QueryExtras {
    * fetch and a reset of the pagination. The rule editor is where an order over
    * the *whole* set is asked for, deliberately, along with the conditions.
    */
-  order?: Array<{ field: string; dir: 'asc' | 'desc' }>;
+  order?: OrderSpec[];
 }
 
 // ── Field key extraction ───────────────────────────────────────────────────

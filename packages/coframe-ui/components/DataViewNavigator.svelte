@@ -57,6 +57,9 @@
     searchable = false,
     searchValue = '',
     onSearch = undefined as ((text: string) => void) | undefined,
+    // The rule editor: a deliberate act, so a button rather than a gesture.
+    rulesActive = false,
+    onOpenRules = undefined as (() => void) | undefined,
   }: {
     config?: NavigatorConfig;
     filterMode?: boolean;
@@ -83,6 +86,8 @@
     searchable?: boolean;
     searchValue?: string;
     onSearch?: (text: string) => void;
+    rulesActive?: boolean;
+    onOpenRules?: () => void;
   } = $props();
 
   // ── Visibility resolution ──────────────────────────────────────────────────
@@ -91,10 +96,10 @@
 
   // Default visible buttons per mode
   const MODE_DEFAULTS: Record<string, Set<string>> = {
-    browser:  new Set(['add', 'edit', 'delete', 'select', 'filter', 'export']),
-    lookup:   new Set(['add', 'edit', 'delete', 'accept', 'cancel', 'filter']),
+    browser:  new Set(['add', 'edit', 'delete', 'select', 'filter', 'search', 'export']),
+    lookup:   new Set(['add', 'edit', 'delete', 'accept', 'cancel', 'filter', 'search']),
     batch:    new Set(['edit', 'accept', 'cancel', 'select', 'filter']),
-    readonly: new Set(['filter', 'export']),
+    readonly: new Set(['filter', 'search', 'export']),
   };
 
   const visibleSet = $derived.by(() => {
@@ -241,7 +246,7 @@
       </button>
     {/if}
 
-    <!-- Filter -->
+    <!-- Column filter: refines what is already loaded, no round trip. -->
     {#if isVisible('filter')}
       <button
         class="cf-nav-btn"
@@ -249,14 +254,21 @@
         title={_('Column filter')}
         onclick={onToggleFilter}
       >
-        <Funnel size={14} />
+        <Search size={14} />
       </button>
     {/if}
 
-    <!-- Search (placeholder — server-side query, Sprint 5) -->
-    {#if isVisible('search')}
-      <button class="cf-nav-btn" title={_('Advanced search')} disabled>
-        <Search size={14} />
+    <!-- The rule editor, and the funnel belongs to it: this is the filter that
+         chooses which rows exist for the view at all, while the one beside it
+         refines what is already loaded. It stays lit while a filter is in force. -->
+    {#if onOpenRules && isVisible('search')}
+      <button
+        class="cf-nav-btn"
+        class:cf-nav-btn-active={rulesActive}
+        title={_('Advanced search')}
+        onclick={onOpenRules}
+      >
+        <Funnel size={14} />
       </button>
     {/if}
 

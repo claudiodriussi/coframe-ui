@@ -33,8 +33,9 @@
     hasTriggerVars,
     buildQuery,
   } from './dataview.query';
-  import type { QueryExtras } from './dataview.query';
+  import type { QueryExtras, OrderSpec } from './dataview.query';
   import type { RuleRow } from './dataview.rules';
+  import RuleEditorView from './RuleEditorView.svelte';
 
   // ── Types (re-exported for consumers) ─────────────────────────────────────
   export type {
@@ -68,6 +69,8 @@
     // server the same question rather than showing a wider list for a moment.
     search?: string;
     rules?: RuleRow[];
+    /** The order asked of the server, when the user chose one over the view's. */
+    order?: OrderSpec[];
   }
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -134,6 +137,10 @@
   // at", and that meaning does not survive a different set.
   let quickSearch = $state(savedState?.search ?? '');
   let ruleRows = $state<RuleRow[]>(savedState?.rules ?? []);
+  // Empty means "the order the view opens with": an absolute absence of order
+  // is not a state worth expressing, since the server ends every paginated
+  // query with the key anyway.
+  let userOrder = $state<OrderSpec[]>(savedState?.order ?? []);
   let filteredCount = $state<number | null>(null);
   let selectedCount = $state(0);
   let tabulatorReady = $state(false);
@@ -157,7 +164,22 @@
   const pkField = $derived(
     serverConfig.tables[view.source?.model ?? '']?.pk_fields?.[0] ?? 'id'
   );
-  const queryExtras = $derived<QueryExtras>({ rules: ruleRows, search: quickSearch });
+  const queryExtras = $derived<QueryExtras>({
+    rules: ruleRows,
+    search: quickSearch,
+    order: userOrder.length > 0 ? userOrder : undefined,
+  });
+
+  // The descriptor's own order, in the shape the editor's order row shows: it
+  // opens filled with what is actually in force, never with a dash under a list
+  // that is visibly sorted.
+  const descriptorOrder = $derived.by<OrderSpec[]>(() =>
+    (view.source?.order_by ?? []).map(f =>
+      typeof f === 'string' && f.startsWith('-')
+        ? { field: f.slice(1), dir: 'desc' as const }
+        : { field: String(f), dir: 'asc' as const },
+    ),
+  );
 
   // The box appears only where it can answer: the search is expanded from what
   // the table declares searchable, and a table that declares nothing refuses it
@@ -212,6 +234,7 @@
       selectedIds: tableRef.getSelectedData().map((r: any) => r[pkField]).filter((id: any) => id != null),
       search: quickSearch,
       rules: ruleRows,
+      order: userOrder,
     };
     try { localStorage.setItem(getStateKey(), JSON.stringify(state)); } catch (_) {}
   }
@@ -544,6 +567,43 @@
     return ruleRows;
   }
 
+  /**
+   * Open the editor. It is a deliberate act and takes the whole screen, unlike
+   * the quick search, which is the everyday gesture and cannot cost even a click.
+   *
+   * What comes back is the whole set at once — conditions, order, and the quick
+   * search, which the editor shows because a filter the user cannot see is a
+   * wrong answer given with confidence. Only the order alone leaves the ticks
+   * alive: it changes the sequence, not the membership.
+   */
+  function openRuleEditor() {
+    if (!view.source?.model) return;
+    stack.push(RuleEditorView, {
+      model: view.source.model as string,
+      rules: ruleRows,
+      order: userOrder,
+      defaultOrder: descriptorOrder,
+      search: quickSearch,
+      title: view.title,
+      onApply: (r: { rules: RuleRow[]; order?: OrderSpec[]; search: string }) => {
+        const orderOnly =
+          JSON.stringify(r.rules) === JSON.stringify(ruleRows) && r.search === quickSearch;
+        const applyAll = () => {
+          ruleRows = r.rules;
+          userOrder = r.order ?? [];
+          quickSearch = r.search;
+        };
+        // The fetch itself is the effect's business: it reads queryExtras.
+        if (orderOnly) {
+          applyAll();
+          saveViewState();
+        } else {
+          changeSet(applyAll);
+        }
+      },
+    });
+  }
+
   // ── Navigator CRUD ─────────────────────────────────────────────────────────
 
   function openForm(recordId: unknown, isNew: boolean) {
@@ -739,6 +799,8 @@
       searchable={quickSearchAvailable}
       searchValue={quickSearch}
       onSearch={handleSearch}
+      rulesActive={ruleRows.length > 0 || userOrder.length > 0}
+      onOpenRules={view.source?.model ? openRuleEditor : undefined}
     />
   {/if}
 
