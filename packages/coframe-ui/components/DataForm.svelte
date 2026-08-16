@@ -43,6 +43,13 @@
   interface Props {
     view: FormDescriptor;
     data?: Record<string, unknown>;        // Step A: local data
+    /**
+     * false → the record is not this form's to write: whoever owns the aggregate
+     * holds it in a buffer and saves the whole tree in one transaction. The form
+     * reads its values from `data` and hands the draft back through `onSave`.
+     * Everything else — create defaults, validation, events — is unchanged.
+     */
+    persist?: boolean;
     recordId?: number | string | null;     // Step C: DB record id (null = new record)
     defaults?: Record<string, unknown>;    // caller's initial values, create mode only
     trigger?: Record<string, unknown>;
@@ -56,6 +63,7 @@
   let {
     view,
     data = {},
+    persist = true,
     recordId,
     defaults,
     trigger,
@@ -367,6 +375,16 @@
           onEvent?.('form_new', { ...defaults });
           return;
         }
+        if (!persist) {
+          // The frame above owns the record and has already read it — as part of
+          // a tree, in one query per collection. Asking again would be a second
+          // read of the same row, and a second answer to the same question.
+          original = { ...data };
+          draft = { ...original };
+          errors = {};
+          onEvent?.('form_load', { ...original });
+          return;
+        }
         res = await api.endpoint('db', { table: src!.model, method: 'get', id });
       } else {
         // Step B: endpoint-driven
@@ -417,7 +435,7 @@
       const src = view.source;
       let res;
 
-      if (isModelMode) {
+      if (isModelMode && persist) {
         // Step C: DB CRUD via standard endpoint — only send declared form fields
         const fieldNames = new Set(flatFields.map(f => f.name));
         const payload = Object.fromEntries(Object.entries(draft).filter(([k]) => fieldNames.has(k)));
@@ -427,15 +445,22 @@
         } else {
           res = await api.endpoint('db', { table: src!.model, method: 'update', id, data: payload });
         }
-      } else if (src?.save_endpoint) {
+      } else if (src?.save_endpoint && persist) {
         // Step B: custom save endpoint
         res = await api.endpoint(src.save_endpoint, {
           ...resolvePass(src.pass ?? {}),
           data: { ...draft },
         });
       } else {
-        // Step A: local callback, no backend
-        await onSave?.({ ...draft });
+        // Step A: the record is someone else's to write — a caller holding local
+        // data, or the frame that owns the aggregate. If it refuses, the form
+        // stays dirty and says why, rather than looking saved.
+        try {
+          await onSave?.({ ...draft });
+        } catch (e) {
+          internalStatus = { message: e instanceof Error ? e.message : String(e), type: 'error' };
+          return;
+        }
         original = { ...draft };
         onEvent?.('form_save', { ...draft });
         return;

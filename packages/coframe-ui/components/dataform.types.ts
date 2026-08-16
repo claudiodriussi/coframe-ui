@@ -131,6 +131,24 @@ export interface TabsNode {
   pages: TabPage[];
 }
 
+/**
+ * A collection edited inside its parent's form, buffered in the parent's
+ * transaction. `model` and `fk` are facts of persistence — the table written and
+ * the column that points back at the parent — while `view` only says how the rows
+ * look. The row form defaults to `{model}_form`.
+ */
+export interface CollectionNode {
+  type: 'collection';
+  id: string;
+  label?: string;
+  model: string;
+  fk: string;
+  form?: string;
+  domain?: unknown;
+  defaults?: Record<string, unknown>;
+  view?: Record<string, unknown>;
+}
+
 export interface ColNode {
   type: 'col';
   weight?: number;
@@ -143,7 +161,8 @@ export interface RowNode {
   children: ColNode[];
 }
 
-export type LayoutNode = FormField | SectionNode | HrNode | LabelNode | TabsNode | RowNode;
+export type LayoutNode =
+  FormField | SectionNode | HrNode | LabelNode | TabsNode | RowNode | CollectionNode;
 
 // ── Top-level descriptor ────────────────────────────────────────────────────
 

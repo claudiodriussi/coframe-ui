@@ -5,8 +5,13 @@
    * Loads the form descriptor lazily from `get_page` (cached per formId),
    * then renders DataForm. Intended to be pushed onto the stack by DataView.
    *
+   * When the descriptor declares collection nodes the page is an **aggregate**, and
+   * this frame owns its buffer: it reads the whole tree with `load_tree`, hands the
+   * root's values to DataForm, and writes everything back with `save_tree` in one
+   * transaction. Nothing declares that mode — the nodes do (relations.md §16.2).
+   *
    * Props:
-   *   formId      string              e.g. 'book_form'
+   *   formId      string              e.g. 'book_form' — also the page id of the aggregate
    *   recordId    string|number|null  null = new record
    *   title       string              shown in header bar
    *   onSaved     (savedData) => void  called after successful save with merged record (before pop)
@@ -17,7 +22,11 @@
   import type { StackInstance } from '$coframe/stack/stack.svelte';
   import { api } from '$coframe/api/client';
   import DataForm from './DataForm.svelte';
-  import type { FormDescriptor } from './dataform.types';
+  import {
+    collectionNodes, loadedAggregate, newAggregate, serialize, setValues,
+    type Aggregate, type TreeNode,
+  } from './aggregate';
+  import type { FormDescriptor, LayoutNode } from './dataform.types';
 
   const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
 
@@ -41,6 +50,10 @@
 
   let descriptor = $state<FormDescriptor | null>(null);
   let loadError  = $state<string | null>(null);
+  /** The buffer, when this page is an aggregate. Null on a plain record form. */
+  let aggregate  = $state<Aggregate | null>(null);
+  /** Known before the tree arrives, so the form waits instead of flashing empty. */
+  let isAggregate = $state(false);
 
   // Descriptor cache — shared across all DataFormView instances in the session.
   const _cache = new Map<string, FormDescriptor>();
@@ -48,17 +61,48 @@
   async function loadDescriptor() {
     if (_cache.has(formId)) {
       descriptor = _cache.get(formId)!;
+    } else {
+      try {
+        const res = await api.endpoint('get_page', { id: formId });
+        if (res.status === 'success') {
+          const page = res.data as Record<string, unknown>;
+          const fd = (page.content ?? page) as FormDescriptor;
+          _cache.set(formId, fd);
+          descriptor = fd;
+        } else {
+          loadError = res.message ?? `Cannot load form ${formId}`;
+          return;
+        }
+      } catch (e) {
+        loadError = e instanceof Error ? e.message : String(e);
+        return;
+      }
+    }
+    await loadAggregate();
+  }
+
+  /** Read the whole tree, or open an empty one — only if the page declares nodes. */
+  async function loadAggregate() {
+    const layout = (descriptor?.layout ?? []) as LayoutNode[];
+    isAggregate = collectionNodes(layout).length > 0;
+    if (!isAggregate) {
+      aggregate = null;
       return;
     }
+
+    if (recordId === null || recordId === undefined) {
+      // A new aggregate: DataForm still computes the create defaults, and they
+      // reach the buffer as the draft it hands back.
+      aggregate = newAggregate(formId);
+      return;
+    }
+
     try {
-      const res = await api.endpoint('get_page', { id: formId });
+      const res = await api.endpoint('load_tree', { page: formId, id: recordId });
       if (res.status === 'success') {
-        const page = res.data as Record<string, unknown>;
-        const fd = (page.content ?? page) as FormDescriptor;
-        _cache.set(formId, fd);
-        descriptor = fd;
+        aggregate = loadedAggregate(formId, res.data as TreeNode);
       } else {
-        loadError = res.message ?? `Cannot load form ${formId}`;
+        loadError = res.message ?? `Cannot load record ${recordId}`;
       }
     } catch (e) {
       loadError = e instanceof Error ? e.message : String(e);
@@ -75,8 +119,27 @@
     loadDescriptor();
   });
 
-  function handleSave(savedData: Record<string, unknown>) {
-    onSaved?.(savedData);
+  /**
+   * Write the aggregate. Throws on refusal, which keeps the form dirty and shows
+   * the reason — a tree that did not reach the database must not look saved.
+   */
+  async function saveAggregate(draft: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const agg = aggregate!;
+    setValues(agg.root, draft);
+
+    const res = await api.endpoint('save_tree', serialize(agg));
+    if (res.status !== 'success') throw new Error(res.message ?? _('Error saving'));
+
+    // Re-read from the answer: the database holds defaults and stamps the buffer
+    // never saw, and the temporary ids are keys now.
+    const data = res.data as { root: TreeNode };
+    aggregate = loadedAggregate(formId, data.root);
+    return { ...aggregate.root.values };
+  }
+
+  async function handleSave(savedData: Record<string, unknown>) {
+    const saved = aggregate ? await saveAggregate(savedData) : savedData;
+    onSaved?.(saved);
     stack.pop();
   }
 
@@ -106,11 +169,12 @@
   <div class="cf-form-view-body">
     {#if loadError}
       <div class="cf-form-view-error">{loadError}</div>
-    {:else if descriptor}
+    {:else if descriptor && (!isAggregate || aggregate)}
       <DataForm
         view={descriptor}
         {recordId}
-        data={data}
+        data={aggregate ? aggregate.root.values : data}
+        persist={!aggregate}
         {defaults}
         onSave={handleSave}
         onCancel={handleCancel}
