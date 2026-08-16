@@ -35,6 +35,8 @@
     recordId = null,
     data = undefined,
     defaults = undefined,
+    buffer = undefined,
+    hideFields = undefined,
     title = '',
     onSaved,
     onCancel,
@@ -43,6 +45,14 @@
     recordId?: string | number | null;
     data?: Record<string, unknown>;       // Step A: computed row, no DB
     defaults?: Record<string, unknown>;   // caller's initial values (create mode)
+    /**
+     * A node of someone else's buffer — this frame edits a row of a collection
+     * rather than owning an aggregate. It reads and writes nothing: confirming
+     * leaves the values in the node, and the caller decides what to do with it.
+     */
+    buffer?: { agg: Aggregate; node: TreeNode };
+    /** Fields the caller supplies, which this form must not draw (§17). */
+    hideFields?: string[];
     title?: string;
     onSaved?: (savedData: Record<string, unknown>) => void;
     onCancel?: () => void;
@@ -83,6 +93,14 @@
 
   /** Read the whole tree, or open an empty one — only if the page declares nodes. */
   async function loadAggregate() {
+    if (buffer) {
+      // A row frame: the node is the data, and it came from the parent's buffer.
+      // Nothing to read, nothing to write — confirming hands the node back.
+      isAggregate = false;
+      aggregate = null;
+      return;
+    }
+
     const layout = (descriptor?.layout ?? []) as LayoutNode[];
     isAggregate = collectionNodes(layout).length > 0;
     if (!isAggregate) {
@@ -138,6 +156,14 @@
   }
 
   async function handleSave(savedData: Record<string, unknown>) {
+    if (buffer) {
+      // A confirm, not a save: the values stay in the node, and the row reaches
+      // the database when the root of the aggregate is saved.
+      setValues(buffer.node, savedData);
+      onSaved?.(savedData);
+      stack.pop();
+      return;
+    }
     const saved = aggregate ? await saveAggregate(savedData) : savedData;
     onSaved?.(saved);
     stack.pop();
@@ -172,9 +198,12 @@
     {:else if descriptor && (!isAggregate || aggregate)}
       <DataForm
         view={descriptor}
-        {recordId}
-        data={aggregate ? aggregate.root.values : data}
-        persist={!aggregate}
+        recordId={buffer ? (buffer.node.op === 'create' ? null : buffer.node.id) : recordId}
+        data={buffer ? buffer.node.values : (aggregate ? aggregate.root.values : data)}
+        persist={!aggregate && !buffer}
+        buffer={aggregate ? { agg: aggregate, node: aggregate.root } : buffer}
+        hideFields={hideFields ?? []}
+        submit={buffer ? 'confirm' : 'save'}
         {defaults}
         onSave={handleSave}
         onCancel={handleCancel}

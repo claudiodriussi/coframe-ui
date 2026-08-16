@@ -32,10 +32,13 @@
   import { serverConfig } from '../api/serverConfig.svelte';
   import { authStore } from '../auth/store.svelte';
   import type { SchemaFieldInfo } from '../api/serverConfig.svelte';
+  import CollectionView from './CollectionView.svelte';
+  import { msgbox } from './msgbox.svelte';
+  import { isDirty, type Aggregate, type TreeNode } from './aggregate';
   import type {
     FormDescriptor, FormField, FormStatus,
     LayoutNode, SectionNode, SectionField, FillerField, ColumnDef,
-    LabelNode, TabsNode, RowNode,
+    LabelNode, TabsNode, RowNode, CollectionNode,
   } from './dataform.types';
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -50,6 +53,16 @@
      * Everything else — create defaults, validation, events — is unchanged.
      */
     persist?: boolean;
+    /**
+     * The aggregate this form edits: the tree (for its id counter) and the node
+     * the form's own fields belong to. Present whenever the page declares
+     * collection nodes — they are drawn against `node`.
+     */
+    buffer?: { agg: Aggregate; node: TreeNode };
+    /** Fields the caller supplies and the form must not draw (§17). */
+    hideFields?: string[];
+    /** `confirm` on an intermediate frame, `save` only at the root (§12). */
+    submit?: 'save' | 'confirm';
     recordId?: number | string | null;     // Step C: DB record id (null = new record)
     defaults?: Record<string, unknown>;    // caller's initial values, create mode only
     trigger?: Record<string, unknown>;
@@ -64,6 +77,9 @@
     view,
     data = {},
     persist = true,
+    buffer = undefined,
+    hideFields = [],
+    submit = 'save',
     recordId,
     defaults,
     trigger,
@@ -164,20 +180,34 @@
   // ── Derived ────────────────────────────────────────────────────────────────
 
   let policy = $derived(view.policy ?? {});
-  let isEditable = $derived(policy.editable === true);
+  // A form is drawn to be filled in: the read-only one — a detail split beside a
+  // list — is the rarer case, and it is the one that deserves the word. Saying
+  // nothing used to mean a page with no buttons and no editable field, which is
+  // indistinguishable from a broken one.
+  let isEditable = $derived(policy.editable !== false);
 
   // All leaf FormFields — from layout tree or legacy flat list.
+  // A hidden field is not merely invisible: it is not the form's business at all,
+  // so it is out of validation and out of the payload too.
   let flatFields = $derived(
-    view.layout
+    (view.layout
       ? extractLayoutFields(view.layout as LayoutNode[])
       : (view.fields ?? []).filter((f): f is FormField => 'name' in f)
+    ).filter((f) => !hideFields.includes(f.name))
   );
+
+  const isFieldHidden = (name: string) => hideFields.includes(name);
 
   // Group fields by same_row: a field with same_row:true joins the previous group.
   let fieldGroups = $derived(groupFields(flatFields));
 
-  // dirty: JSON comparison — $state proxy reads all props correctly
-  let dirty = $derived(JSON.stringify(draft) !== JSON.stringify(original));
+  // dirty: JSON comparison — $state proxy reads all props correctly.
+  // The buffer counts too: confirming a grandchild must leave the root dirty, or
+  // one closes the whole thing convinced nothing was changed (§12).
+  let dirty = $derived(
+    JSON.stringify(draft) !== JSON.stringify(original)
+    || (buffer ? isDirty(buffer.node) : false)
+  );
 
   // Trigger not yet arrived for a trigger-dependent async form
   let waitingForTrigger = $derived(isAsyncMode && hasTriggerDeps && trigger === undefined);
@@ -493,8 +523,21 @@
     }
   }
 
-  function handleCancel() {
-    if (dirty && !confirm(_('You have unsaved changes. Discard them?'))) return;
+  // Esc reaches here too, and a key held down would otherwise stack dialogs: the
+  // second `show()` takes the resolver of the first, and the first `await` never
+  // returns — a form that quietly refuses to close.
+  let confirming = $state(false);
+
+  async function handleCancel() {
+    if (confirming) return;
+    if (dirty) {
+      confirming = true;
+      try {
+        if (!(await msgbox.confirm(_('You have unsaved changes. Discard them?')))) return;
+      } finally {
+        confirming = false;
+      }
+    }
     draft = { ...original };
     errors = {};
     onCancel?.();
@@ -704,13 +747,16 @@
           class="btn btn-primary py-1.5 text-xs"
           disabled={saving}
           onclick={handleSave}
-          title={_('Save (F12 or Ctrl+Enter)')}
+          title={submit === 'confirm' ? _('Confirm (F12 or Ctrl+Enter)') : _('Save (F12 or Ctrl+Enter)')}
         >
           {#if buttonStyle === 'icon' || buttonStyle === 'icon-label'}
             <Check size={14} />
           {/if}
           {#if buttonStyle !== 'icon'}
-            {saving ? _('Saving…') : (action.label ?? _('Save'))}
+            <!-- An intermediate frame confirms; only the root saves. Said the same
+                 everywhere, the user at the third level believes it reached the
+                 database (§12). -->
+            {saving ? _('Saving…') : (action.label ?? (submit === 'confirm' ? _('Confirm') : _('Save')))}
           {/if}
         </button>
       {:else if action.id === 'cancel'}
@@ -869,9 +915,20 @@
 {#snippet renderLayout(nodes: LayoutNode[])}
   {#each nodes as node}
     {#if 'name' in node}
-      <div class="mb-4" data-field={(node as FormField).name}>
-        {@render fieldContent(node as FormField)}
-      </div>
+      {#if !isFieldHidden((node as FormField).name)}
+        <div class="mb-4" data-field={(node as FormField).name}>
+          {@render fieldContent(node as FormField)}
+        </div>
+      {/if}
+    {:else if node.type === 'collection'}
+      {#if buffer}
+        <CollectionView
+          node={node as CollectionNode}
+          agg={buffer.agg}
+          parent={buffer.node}
+          readonly={!isEditable}
+        />
+      {/if}
     {:else if node.type === 'section'}
       {@render sectionNode(node as SectionNode)}
     {:else if node.type === 'hr'}
@@ -888,7 +945,7 @@
 
 {#snippet columnFields(fields: (SectionField | FillerField)[])}
   <div class="flex flex-wrap gap-x-4">
-    {#each fields as item}
+    {#each fields.filter((i) => 'filler' in i || !isFieldHidden((i as SectionField).name)) as item}
       {#if 'filler' in item}
         <div style="flex: 0 0 100%; height: 0"></div>
       {:else}

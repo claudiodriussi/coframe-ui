@@ -84,7 +84,11 @@
         format: 'records',
         query: {
           table,
-          columns: [pkField, df],
+          // `select`, not `columns`: the latter is a key of a *view* descriptor,
+          // and the querybuilder silently ignored it — which meant the whole row
+          // came back instead, so a display field that only exists as an
+          // expression (a hybrid property) was never in the answer.
+          select: [pkField, df],
           filters: { conditions: { column: pkField, op: 'eq', value: v } },
           limit: 1,
           resolve: true,
@@ -129,7 +133,7 @@
         format: 'records',
         query: {
           table: fkTarget,
-          columns: [fkPkField, df],
+          select: [fkPkField, df],
           search: q,
           limit: 10,
         },

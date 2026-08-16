@@ -75,8 +75,14 @@ export interface NavigatorConfig {
   show?: string[];     // add to defaults
   hide?: string[];     // remove from defaults
   commands?: CommandItem[];
-  // mode is internal only — set programmatically (e.g. 'lookup' for FK picker)
-  mode?: 'browser' | 'lookup' | 'readonly';
+  /**
+   * Internal only — set programmatically, never from YAML.
+   *   lookup   — picking a record for a caller (FK picker)
+   *   batch    — accept/cancel over computed rows (wizard steps)
+   *   buffered — the rows belong to an aggregate: the gestures are emitted as
+   *              events and whoever owns the buffer performs them
+   */
+  mode?: 'browser' | 'lookup' | 'readonly' | 'batch' | 'buffered';
 }
 
 export interface ViewDescriptor {

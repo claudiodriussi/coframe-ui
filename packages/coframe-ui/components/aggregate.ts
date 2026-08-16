@@ -91,9 +91,25 @@ export function isDirty(node: TreeNode): boolean {
   return Object.values(node.children).some((rows) => rows.some(isDirty));
 }
 
-/** A deep copy — a child frame edits its own and the parent replaces it on confirm. */
+/**
+ * A deep copy — a child frame edits its own and the parent replaces it on confirm.
+ *
+ * Written out rather than `structuredClone`, which throws on a node that lives in
+ * a `$state` tree: a reactive proxy is not cloneable. Copying the structure we own
+ * and leaving the leaf values alone is also the more honest copy — a value is
+ * replaced whole, never mutated in place.
+ */
 export function cloneNode(node: TreeNode): TreeNode {
-  return structuredClone(node);
+  const copy: TreeNode = {
+    id: node.id,
+    values: { ...node.values },
+    children: Object.fromEntries(
+      Object.entries(node.children).map(([cid, rows]) => [cid, rows.map(cloneNode)])
+    ),
+  };
+  if (node.op) copy.op = node.op;
+  if (node.touched) copy.touched = [...node.touched];
+  return copy;
 }
 
 // ── Writing ─────────────────────────────────────────────────────────────────
@@ -128,23 +144,44 @@ export function setValues(node: TreeNode, patch: Record<string, unknown>): boole
 }
 
 /**
- * Add a row to a collection.
+ * A row that belongs to no collection yet.
+ *
+ * Detached on purpose: a row being filled in on a frame that the user may still
+ * cancel has no business showing up in the parent's grid, and attaching it only
+ * on confirm means there is nothing to undo.
  *
  * The foreign key to the parent is deliberately absent: it is a value the
  * framework writes, and leaving it out is why a row created under a parent that
  * has no key yet needs no special case here.
  */
+export function newRow(agg: Aggregate, values: Record<string, unknown> = {}): TreeNode {
+  const row = emptyNode(nextTempId(agg));
+  row.op = 'create';
+  row.values = { ...values };
+  row.touched = Object.keys(values);
+  return row;
+}
+
+export function attachRow(parent: TreeNode, cid: string, row: TreeNode): void {
+  rowsOf(parent, cid).push(row);
+}
+
+/** Put an edited copy back where the one it was copied from sits. */
+export function replaceRow(parent: TreeNode, cid: string, row: TreeNode): void {
+  const rows = rowsOf(parent, cid);
+  const index = rows.findIndex((candidate) => candidate.id === row.id);
+  if (index < 0) return;
+  rows[index] = row;
+}
+
 export function addRow(
   agg: Aggregate,
   parent: TreeNode,
   cid: string,
   values: Record<string, unknown> = {}
 ): TreeNode {
-  const row = emptyNode(nextTempId(agg));
-  row.op = 'create';
-  row.values = { ...values };
-  row.touched = Object.keys(values);
-  rowsOf(parent, cid).push(row);
+  const row = newRow(agg, values);
+  attachRow(parent, cid, row);
   return row;
 }
 

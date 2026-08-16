@@ -25,6 +25,7 @@
   import { serverConfig, resolveFormatter as resolveFormatterByType, resolveAlign } from '$coframe/api/serverConfig.svelte';
   import type { SchemaFieldInfo } from '$coframe/api/serverConfig.svelte';
   import { resolveFormatter } from '$coframe/formatters/registry';
+  import { msgbox } from './msgbox.svelte';
   import { stack as globalStack } from '$coframe/stack/stack.svelte';
   import type { StackInstance } from '$coframe/stack/stack.svelte';
   import {
@@ -690,19 +691,35 @@
   }
 
   function handleNavAdd() {
+    // Buffered: the rows are someone else's — say what was asked, do nothing.
+    // The owner holds the buffer and knows what a new row costs there.
+    if (navigatorMode === 'buffered') { onEvent?.('row_add', null); return; }
     openForm(null, true);
   }
 
   function handleNavEdit() {
     if (_activeRowData == null) return;
+    if (navigatorMode === 'buffered') { onEvent?.('row_edit', _activeRowData); return; }
     const id = (_activeRowData as any)[pkField];
     openForm(id, false);
   }
 
   async function handleNavDelete() {
     if (_activeRowData == null) return;
-    const id = (_activeRowData as any)[pkField];
-    if (!confirm(_('Delete the selected record?'))) return;
+    const row = _activeRowData;
+
+    // One question for both paths. A buffered row does not reach the database
+    // until the parent is saved, but that is no reason to ask less: leaving the
+    // form would throw away every other change too, and a row just typed in has
+    // no undo at all.
+    if (!(await msgbox.confirm(_('Delete the selected record?')))) return;
+
+    if (navigatorMode === 'buffered') {
+      onEvent?.('row_delete', row);
+      _activeRowData = null;
+      return;
+    }
+    const id = (row as any)[pkField];
     const model = view.source?.model as string | undefined;
     if (!model) return;
     try {
@@ -715,10 +732,10 @@
         if (totalCount !== null) totalCount--;
         if (adjacentId != null) queueMicrotask(() => tableRef?.focusRowById(adjacentId));
       } else {
-        alert(res.message ?? _('Error deleting record'));
+        msgbox.error(res.message ?? _('Error deleting record'));
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
+      msgbox.error(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -726,6 +743,10 @@
   function handleRowDblClick(row: unknown) {
     const rowData = row as Record<string, unknown>;
     _activeRowData = rowData;
+    if (navigatorMode === 'buffered') {
+      onEvent?.('row_edit', rowData);
+      return;
+    }
     if (showNavigator && (navigatorMode === 'browser' || navigatorMode === 'batch') && formId) {
       // Navigator owns the action — open form directly
       const id = rowData[pkField];

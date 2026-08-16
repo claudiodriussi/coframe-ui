@@ -23,6 +23,8 @@ registerTranslations('it', {
   // form buttons
   'Save':                     'Salva',
   'Save (F12 or Ctrl+Enter)': 'Salva (F12 o Ctrl+Enter)',
+  // An intermediate frame confirms into the buffer; only the root saves.
+  'Confirm (F12 or Ctrl+Enter)': 'Conferma (F12 o Ctrl+Enter)',
   'Cancel':                   'Annulla',
   'Cancel (Esc)':             'Annulla (Esc)',
 

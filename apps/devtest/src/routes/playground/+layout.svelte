@@ -4,6 +4,7 @@
   import { loadLocale } from '$coframe/i18n';
   import { setPluginLoader } from '$coframe/plugins/context';
   import { pluginLoader } from '$app-plugins/registry';
+  import MessageBox from '$coframe/components/MessageBox.svelte';
   import '$app-plugins/formatters';
 
   setPluginLoader(pluginLoader);
@@ -33,4 +34,7 @@
     {@render children()}
   </div>
 </div>
+<!-- The lab asks the same questions the app does — a dialog with nobody to render
+     it would leave the caller waiting for an answer that never comes. -->
+<MessageBox />
 {/if}

@@ -99,6 +99,9 @@
     browser:  new Set(['add', 'edit', 'delete', 'select', 'filter', 'search', 'export']),
     lookup:   new Set(['add', 'edit', 'delete', 'accept', 'cancel', 'filter', 'search']),
     batch:    new Set(['edit', 'accept', 'cancel', 'select', 'filter']),
+    // The rows are a buffer, not a set the user chose: nothing to search or
+    // re-query, and the count is what the grid already shows.
+    buffered: new Set(['add', 'edit', 'delete']),
     readonly: new Set(['filter', 'search', 'export']),
   };
 
