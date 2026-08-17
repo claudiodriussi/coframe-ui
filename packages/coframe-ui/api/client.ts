@@ -149,7 +149,10 @@ class CoframeAPI {
       if (sm?.text) statusBar.fromServer(sm);
       else statusBar.clearServer();
       if (d?.status === 'success') {
-        return { status: 'success', data: d.data };
+        // A success may carry a line of its own — an endpoint called from a
+        // button reports what it did. Distinct from `$message`, which is the
+        // framework's ambient status line and belongs to no caller.
+        return { status: 'success', data: d.data, message: d.message };
       }
       return {
         status: 'error',
