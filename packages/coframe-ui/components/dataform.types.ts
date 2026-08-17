@@ -122,6 +122,8 @@ export interface LabelNode {
 
 export interface TabPage {
   label: string;
+  /** Collection id whose buffered row count is shown beside the label. */
+  count?: string;
   layout: LayoutNode[];
 }
 
@@ -147,6 +149,38 @@ export interface CollectionNode {
   domain?: unknown;
   defaults?: Record<string, unknown>;
   view?: Record<string, unknown>;
+  /** Grid height: a CSS length, or `fill` to take what the container gives. */
+  height?: string;
+}
+
+/**
+ * A button in a form: it opens a **face of this buffer**, or it *does* something.
+ *
+ * Both faces are the same gesture at two depths of the buffer — `opens.type:
+ * collection` opens a subtree, `opens.type: form` opens the record itself with
+ * fewer fields — so both write where the form writes and the save stays at the
+ * root. Reaching *another* record is deliberately not here: the FK widget already
+ * carries that gesture (relations.md §19.1).
+ */
+export interface ButtonOpensCollection extends CollectionNode {}
+
+export interface ButtonOpensForm {
+  type: 'form';
+  /** Page id of a form descriptor over the same record. */
+  page: string;
+}
+
+export interface ButtonNode {
+  type: 'button';
+  id?: string;
+  label: string;
+  icon?: string;
+  /** `true` → the collection this button opens; a string → that collection id. */
+  count?: boolean | string;
+  opens?: ButtonOpensCollection | ButtonOpensForm;
+  /** The other family: an endpoint, with `$record.x` resolved against the draft. */
+  endpoint?: string;
+  pass?: Record<string, unknown>;
 }
 
 export interface ColNode {
@@ -162,7 +196,7 @@ export interface RowNode {
 }
 
 export type LayoutNode =
-  FormField | SectionNode | HrNode | LabelNode | TabsNode | RowNode | CollectionNode;
+  FormField | SectionNode | HrNode | LabelNode | TabsNode | RowNode | CollectionNode | ButtonNode;
 
 // ── Top-level descriptor ────────────────────────────────────────────────────
 

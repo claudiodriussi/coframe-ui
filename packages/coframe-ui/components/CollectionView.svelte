@@ -31,17 +31,25 @@
   import type { CollectionNode } from './dataform.types';
   import type { ViewDescriptor } from './dataview.types';
 
-  let { node, agg, parent, readonly = false }: {
+  let { node, agg, parent, readonly = false, fallbackLabel = undefined }: {
     node: CollectionNode;
     agg: Aggregate;
     parent: TreeNode;
     readonly?: boolean;
+    /** The name of what encloses the grid — a tab — when the node carries none. */
+    fallbackLabel?: string;
   } = $props();
 
   const stack: StackInstance = getContext<StackInstance>('cf:stack') ?? globalStack;
 
   const pkField = $derived(serverConfig.tables[node.model]?.pk_fields?.[0] ?? 'id');
   const formId  = $derived(node.form ?? `${node.model.toLowerCase()}_form`);
+
+  // Tabulator measures its container, and a container that grows with its content
+  // measures zero — so the grid always gets a height. A band inside a form has a
+  // default one; `fill` is for the frame, where the grid is the whole page.
+  const height    = $derived(node.height ?? '14rem');
+  const gridStyle = $derived(height === 'fill' ? 'flex: 1; min-height: 0' : `height: ${height}`);
 
   /**
    * The buffer's own value objects, so a confirmed edit appears without a second
@@ -147,7 +155,9 @@
 
     stack.push(DataFormView, {
       formId,
-      title: node.label ?? node.model,
+      // Moving the label onto the tab left the node without one, and the frame
+      // was announcing the table name: it falls back on what encloses the grid.
+      title: node.label ?? fallbackLabel ?? node.model,
       buffer: { agg, node: editing },
       defaults: isNew ? node.defaults : undefined,
       hideFields: isNew ? [node.fk, pkField] : [node.fk],
@@ -177,11 +187,11 @@
   }
 </script>
 
-<div class="cf-collection">
+<div class="cf-collection" class:cf-collection-fill={height === 'fill'}>
   {#if node.label}
     <div class="cf-collection-label">{node.label}</div>
   {/if}
-  <div class="cf-collection-grid">
+  <div class="cf-collection-grid" style={gridStyle}>
     <DataView {view} data={rows} onEvent={handleEvent} />
   </div>
 </div>
@@ -201,12 +211,17 @@
     color: var(--cf-text-subtle);
   }
 
-  /* The grid needs a height of its own: Tabulator measures its container, and a
-     container that grows with its content measures zero. */
+  /* Height comes from the node — see the derivation above. */
   .cf-collection-grid {
-    height: 14rem;
     border: 1px solid var(--cf-border);
     border-radius: 0.375rem;
     overflow: hidden;
+  }
+
+  /* `fill`: the grid is the page, so the wrapper must claim the space first. */
+  .cf-collection-fill {
+    flex: 1;
+    margin-bottom: 0;
+    height: 100%;
   }
 </style>

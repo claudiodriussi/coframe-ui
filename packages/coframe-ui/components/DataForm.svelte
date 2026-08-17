@@ -33,12 +33,17 @@
   import { authStore } from '../auth/store.svelte';
   import type { SchemaFieldInfo } from '../api/serverConfig.svelte';
   import CollectionView from './CollectionView.svelte';
+  import DataFormView from './DataFormView.svelte';
   import { msgbox } from './msgbox.svelte';
-  import { isDirty, type Aggregate, type TreeNode } from './aggregate';
+  import { resolveIcon } from './icons';
+  import { stack as globalStack } from '$coframe/stack/stack.svelte';
+  import type { StackInstance } from '$coframe/stack/stack.svelte';
+  import { getContext } from 'svelte';
+  import { isDirty, liveRows, type Aggregate, type TreeNode } from './aggregate';
   import type {
     FormDescriptor, FormField, FormStatus,
     LayoutNode, SectionNode, SectionField, FillerField, ColumnDef,
-    LabelNode, TabsNode, RowNode, CollectionNode,
+    LabelNode, TabsNode, RowNode, CollectionNode, ButtonNode,
   } from './dataform.types';
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -61,6 +66,12 @@
     buffer?: { agg: Aggregate; node: TreeNode };
     /** Fields the caller supplies and the form must not draw (§17). */
     hideFields?: string[];
+    /**
+     * What encloses this form — the title of its frame. A collection whose label
+     * moved onto a tab, or onto the button that opened it, names its row frames
+     * with it instead of with the table.
+     */
+    groupLabel?: string;
     /** `confirm` on an intermediate frame, `save` only at the root (§12). */
     submit?: 'save' | 'confirm';
     recordId?: number | string | null;     // Step C: DB record id (null = new record)
@@ -79,6 +90,7 @@
     persist = true,
     buffer = undefined,
     hideFields = [],
+    groupLabel = undefined,
     submit = 'save',
     recordId,
     defaults,
@@ -397,12 +409,16 @@
       if (isModelMode) {
         const id = resolveRecordId();
         if (id === null || id === undefined) {
-          // Create mode: initialize with defaults, no load
-          const defaults = computeCreateDefaults(src);
-          original = { ...defaults };
-          draft = { ...defaults };
+          // Create mode: initialize with defaults, no load. A form that does not
+          // own the record starts from the values it was handed — whoever owns it
+          // computed the defaults already, and recomputing over them would undo
+          // what the user has typed.
+          const computed = computeCreateDefaults(src);
+          const initial = persist ? computed : { ...computed, ...data };
+          original = { ...initial };
+          draft = { ...initial };
           errors = {};
-          onEvent?.('form_new', { ...defaults });
+          onEvent?.('form_new', { ...initial });
           return;
         }
         if (!persist) {
@@ -452,6 +468,127 @@
     untrack(() => loadData());
   });
 
+  // ── Buttons: a face of this buffer, or an endpoint ─────────────────────────
+  //
+  // A button never reaches another record: what it opens belongs to the record
+  // this form is editing, so the frame writes where this form writes and the save
+  // stays at the root (relations.md §19.1). Two shapes of the same gesture —
+  // a collection node inline, or a form descriptor by id — and a third that is
+  // not a gesture on data at all: an endpoint.
+
+  const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
+
+  /** Keys a button frame changed: they are part of the record, so they must ship. */
+  let frameFields = $state<string[]>([]);
+
+  /** Which button is waiting for its endpoint — the click is not repeatable. */
+  let busyButton = $state<string | null>(null);
+
+  const buttonKey = (node: ButtonNode) => node.id ?? node.label;
+
+  /**
+   * The count beside a label. Free: the rows are in the buffer already, which is
+   * also its limit — a collection that is not buffered would need a query, and
+   * that is a different decision (relations.md §15).
+   */
+  function countOf(count: boolean | string | undefined, fallback?: string): number | null {
+    if (!count || !buffer) return null;
+    const cid = count === true ? fallback : String(count);
+    if (!cid) return null;
+    return liveRows(buffer.node, cid).length;
+  }
+
+  function buttonCount(node: ButtonNode): number | null {
+    const opens = node.opens;
+    const cid = opens && opens.type === 'collection' ? (opens as CollectionNode).id : undefined;
+    return countOf(node.count, cid);
+  }
+
+  /** `$record.x` — a value of the record being edited, read from the live draft. */
+  function resolveRecordTokens(map: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(
+      Object.entries(map).map(([k, v]) => {
+        if (typeof v === 'string' && v.startsWith('$record.')) {
+          return [k, draft[v.slice('$record.'.length)]];
+        }
+        return [k, v];
+      })
+    );
+  }
+
+  /**
+   * The descriptor of a frame that shows one collection and nothing else.
+   *
+   * No `source`: the frame edits no record of its own, which puts DataForm in its
+   * local mode and keeps it from asking the database for something it was handed.
+   * The grid takes the whole frame — inline it is a band in a form, here it is the
+   * page.
+   */
+  function collectionFrame(node: CollectionNode): FormDescriptor {
+    return {
+      type: 'form',
+      layout: [{ ...node, height: 'fill' } as CollectionNode],
+      policy: { editable: isEditable, button_style: 'label' },
+      actions: { toolbar: ['save', 'cancel'] },
+    };
+  }
+
+  function openButton(node: ButtonNode) {
+    if (node.endpoint) {
+      runEndpoint(node);
+      return;
+    }
+    const opens = node.opens;
+    if (!opens) {
+      console.error(`[DataForm] Button "${node.label}" neither opens anything nor names an endpoint.`);
+      return;
+    }
+    if (opens.type === 'collection' && !buffer) {
+      console.error(`[DataForm] Button "${node.label}" opens a collection, but this form holds no buffer.`);
+      return;
+    }
+
+    // What the frame edits is the *draft*, not the loaded record: a value typed
+    // here and not yet saved is what the other face must show.
+    const before = { ...draft };
+
+    stack.push(DataFormView, {
+      formId: opens.type === 'form' ? (opens.page as string) : undefined,
+      descriptor: opens.type === 'collection' ? collectionFrame(opens as CollectionNode) : undefined,
+      title: node.label,
+      data: { ...draft },
+      buffer,
+      onSaved: (values: Record<string, unknown>) => {
+        // Only what moved: the frame hands back the whole record it was given,
+        // and merging all of it would make every key look edited.
+        for (const [key, value] of Object.entries(values)) {
+          if (value === before[key]) continue;
+          draft[key] = value;
+          if (!frameFields.includes(key)) frameFields.push(key);
+        }
+      },
+    });
+  }
+
+  async function runEndpoint(node: ButtonNode) {
+    const key = buttonKey(node);
+    if (busyButton) return;
+    busyButton = key;
+    internalStatus = undefined;
+    try {
+      const res = await api.endpoint(node.endpoint!, resolveRecordTokens(node.pass ?? {}));
+      if (res.status === 'success') {
+        internalStatus = { message: res.message ?? _('Done'), type: 'success' };
+      } else {
+        await msgbox.error(res.message ?? _('Error'));
+      }
+    } catch (e) {
+      await msgbox.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      busyButton = null;
+    }
+  }
+
   // ── Save / Cancel ──────────────────────────────────────────────────────────
 
   async function handleSave() {
@@ -466,8 +603,11 @@
       let res;
 
       if (isModelMode && persist) {
-        // Step C: DB CRUD via standard endpoint — only send declared form fields
-        const fieldNames = new Set(flatFields.map(f => f.name));
+        // Step C: DB CRUD via standard endpoint — only send declared form fields,
+        // plus what a button frame edited: those are fields of this record too,
+        // declared in another descriptor, and dropping them would lose an edit
+        // the user made through a button this form put on screen.
+        const fieldNames = new Set([...flatFields.map(f => f.name), ...frameFields]);
         const payload = Object.fromEntries(Object.entries(draft).filter(([k]) => fieldNames.has(k)));
         const id = resolveRecordId();
         if (id === null || id === undefined) {
@@ -680,7 +820,7 @@
       </div>
 
     {:else if view.layout}
-      {@render renderLayout(view.layout as LayoutNode[])}
+      {@render renderLayout(view.layout as LayoutNode[], groupLabel)}
 
     {:else}
       {#if fieldGroups.length === 0}
@@ -912,7 +1052,9 @@
 
 <!-- ── Layout engine snippets ─────────────────────────────────────────────── -->
 
-{#snippet renderLayout(nodes: LayoutNode[])}
+<!-- `groupLabel` is the name of what encloses these nodes — a tab — so a grid
+     whose label moved onto the tab can still name the frame it opens. -->
+{#snippet renderLayout(nodes: LayoutNode[], groupLabel: string | undefined)}
   {#each nodes as node}
     {#if 'name' in node}
       {#if !isFieldHidden((node as FormField).name)}
@@ -927,8 +1069,11 @@
           agg={buffer.agg}
           parent={buffer.node}
           readonly={!isEditable}
+          fallbackLabel={groupLabel}
         />
       {/if}
+    {:else if node.type === 'button'}
+      {@render buttonNode(node as ButtonNode)}
     {:else if node.type === 'section'}
       {@render sectionNode(node as SectionNode)}
     {:else if node.type === 'hr'}
@@ -1028,6 +1173,7 @@
   <div class="mb-4">
     <div class="flex border-b" style="border-color: var(--cf-border)">
       {#each node.pages as page, i}
+        {@const count = countOf(page.count)}
         <button
           type="button"
           class="-mb-px border-b-2 px-4 py-2 text-sm transition-colors"
@@ -1036,15 +1182,32 @@
             : 'border-color: transparent; color: var(--cf-text-subtle)'}
           onclick={() => { tabStates[tabKey] = i; }}
         >
-          {page.label}
+          <!-- The count answers what an empty tab costs to discover: a click. -->
+          {page.label}{#if count !== null}&nbsp;({count}){/if}
         </button>
       {/each}
     </div>
     {#each node.pages as page, i}
       <div class={i === activeIdx ? 'pt-4' : 'hidden'}>
-        {@render renderLayout(page.layout)}
+        {@render renderLayout(page.layout, page.label)}
       </div>
     {/each}
+  </div>
+{/snippet}
+
+{#snippet buttonNode(node: ButtonNode)}
+  {@const count = buttonCount(node)}
+  {@const Icon = resolveIcon(node.icon)}
+  <div class="mb-4">
+    <button
+      type="button"
+      class="btn btn-secondary py-1.5 text-xs"
+      disabled={busyButton !== null}
+      onclick={() => openButton(node)}
+    >
+      {#if Icon}<Icon size={14} />{/if}
+      {node.label}{#if count !== null}&nbsp;({count}){/if}
+    </button>
   </div>
 {/snippet}
 
@@ -1052,7 +1215,7 @@
   <div class="mb-4 flex gap-4">
     {#each node.children as col}
       <div style="flex: {col.weight ?? 1} 1 0; min-width: 0">
-        {@render renderLayout(col.layout)}
+        {@render renderLayout(col.layout, groupLabel)}
       </div>
     {/each}
   </div>

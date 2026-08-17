@@ -12,6 +12,7 @@
    *
    * Props:
    *   formId      string              e.g. 'book_form' — also the page id of the aggregate
+   *   descriptor  FormDescriptor      a descriptor the caller built, instead of an id
    *   recordId    string|number|null  null = new record
    *   title       string              shown in header bar
    *   onSaved     (savedData) => void  called after successful save with merged record (before pop)
@@ -31,7 +32,8 @@
   const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
 
   let {
-    formId,
+    formId = undefined,
+    descriptor: givenDescriptor = undefined,
     recordId = null,
     data = undefined,
     defaults = undefined,
@@ -41,7 +43,13 @@
     onSaved,
     onCancel,
   }: {
-    formId: string;
+    formId?: string;
+    /**
+     * A descriptor built by the caller instead of fetched by id — a frame that
+     * shows one face of a form it already has (relations.md §19.1). Mutually
+     * exclusive with `formId`.
+     */
+    descriptor?: FormDescriptor;
     recordId?: string | number | null;
     data?: Record<string, unknown>;       // Step A: computed row, no DB
     defaults?: Record<string, unknown>;   // caller's initial values (create mode)
@@ -69,7 +77,12 @@
   const _cache = new Map<string, FormDescriptor>();
 
   async function loadDescriptor() {
-    if (_cache.has(formId)) {
+    if (givenDescriptor) {
+      descriptor = givenDescriptor;
+    } else if (!formId) {
+      loadError = 'A form frame needs either a page id or a descriptor';
+      return;
+    } else if (_cache.has(formId)) {
       descriptor = _cache.get(formId)!;
     } else {
       try {
@@ -108,6 +121,13 @@
       return;
     }
 
+    if (!formId) {
+      // The page id *is* the write contract: it is what tells the server which
+      // collections may be written (relations.md §7).
+      loadError = 'A descriptor with collections cannot be written without a page id';
+      return;
+    }
+
     if (recordId === null || recordId === undefined) {
       // A new aggregate: DataForm still computes the create defaults, and they
       // reach the buffer as the draft it hands back.
@@ -130,10 +150,11 @@
   // Keyed on what it fetches, like every other fetching effect: re-running is
   // harmless here only because of the cache above, and relying on that is
   // relying on an accident.
-  let loadedFormId: string | null = null;
+  let loadedKey: string | null = null;
   $effect(() => {
-    if (formId === loadedFormId) return;
-    loadedFormId = formId;
+    const key = formId ?? '\0inline';
+    if (key === loadedKey) return;
+    loadedKey = key;
     loadDescriptor();
   });
 
@@ -144,14 +165,15 @@
   async function saveAggregate(draft: Record<string, unknown>): Promise<Record<string, unknown>> {
     const agg = aggregate!;
     setValues(agg.root, draft);
+    const page = formId!;
 
     const res = await api.endpoint('save_tree', serialize(agg));
     if (res.status !== 'success') throw new Error(res.message ?? _('Error saving'));
 
     // Re-read from the answer: the database holds defaults and stamps the buffer
     // never saw, and the temporary ids are keys now.
-    const data = res.data as { root: TreeNode };
-    aggregate = loadedAggregate(formId, data.root);
+    const saved = res.data as { root: TreeNode };
+    aggregate = loadedAggregate(page, saved.root);
     return { ...aggregate.root.values };
   }
 
@@ -199,10 +221,11 @@
       <DataForm
         view={descriptor}
         recordId={buffer ? (buffer.node.op === 'create' ? null : buffer.node.id) : recordId}
-        data={buffer ? buffer.node.values : (aggregate ? aggregate.root.values : data)}
+        data={data ?? (buffer ? buffer.node.values : (aggregate ? aggregate.root.values : undefined))}
         persist={!aggregate && !buffer}
         buffer={aggregate ? { agg: aggregate, node: aggregate.root } : buffer}
         hideFields={hideFields ?? []}
+        groupLabel={title || undefined}
         submit={buffer ? 'confirm' : 'save'}
         {defaults}
         onSave={handleSave}
