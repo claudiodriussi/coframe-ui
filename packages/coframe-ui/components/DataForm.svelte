@@ -1171,6 +1171,19 @@
   {@const tabKey = node.id ?? node.pages.map((p) => p.label).join('|')}
   {@const activeIdx = tabStates[tabKey] ?? 0}
   <div class="mb-4">
+    {#if node.pages.length === 1}
+      <!-- A strip with one tab reads as a mistake, and the container is there for
+           a reason that has nothing to do with the reader: a collection lives in
+           a `tabs` even alone, so a derived plugin can put a sibling next to it.
+           So it wears the label of a band until a second page arrives — the same
+           decision `TabView` already takes for a panel area. -->
+      {@const only = node.pages[0]}
+      {@const count = countOf(only.count)}
+      <p class="mb-2 text-sm font-semibold" style="color: var(--cf-text)">
+        {only.label}{#if count !== null}&nbsp;({count}){/if}
+      </p>
+      {@render renderLayout(only.layout, only.label)}
+    {:else}
     <div class="flex border-b" style="border-color: var(--cf-border)">
       {#each node.pages as page, i}
         {@const count = countOf(page.count)}
@@ -1192,6 +1205,7 @@
         {@render renderLayout(page.layout, page.label)}
       </div>
     {/each}
+    {/if}
   </div>
 {/snippet}
 
