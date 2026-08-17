@@ -98,6 +98,8 @@ export interface FillerField {
 }
 
 export interface ColumnDef {
+  /** Identity for the merge — without it a derived plugin can only append a column. */
+  id?: string;
   fields: (SectionField | FillerField)[];
 }
 
@@ -121,6 +123,8 @@ export interface LabelNode {
 }
 
 export interface TabPage {
+  /** Identity for the merge: a derived plugin refines *this* page by naming it. */
+  id?: string;
   label: string;
   /** Collection id whose buffered row count is shown beside the label. */
   count?: string;
@@ -185,6 +189,7 @@ export interface ButtonNode {
 
 export interface ColNode {
   type: 'col';
+  id?: string;
   weight?: number;
   layout: LayoutNode[];
 }
