@@ -75,14 +75,25 @@ function normalize(node: TreeNode): TreeNode {
 
 // ── Reading ─────────────────────────────────────────────────────────────────
 
-/** The rows of a collection, creating the key so a caller can push into it. */
+/**
+ * The rows of a collection, creating the key so a caller can push into it.
+ *
+ * For **writers** only: it mutates, so calling it while rendering is forbidden —
+ * Svelte refuses a write inside a derived, and rightly. Readers use `liveRows`.
+ */
 export function rowsOf(node: TreeNode, cid: string): TreeNode[] {
   return (node.children[cid] ??= []);
 }
 
-/** What a grid shows: a deleted row is still in the buffer, but not on screen. */
+/**
+ * What a grid shows: a deleted row is still in the buffer, but not on screen.
+ *
+ * Reads without creating. A collection nobody has added to yet is *absent*, and
+ * an empty list is a different fact from a missing key — the serializer reads
+ * that difference, and a render pass has no business writing it.
+ */
 export function liveRows(node: TreeNode, cid: string): TreeNode[] {
-  return rowsOf(node, cid).filter((row) => row.op !== 'delete');
+  return (node.children[cid] ?? []).filter((row) => row.op !== 'delete');
 }
 
 /** True when anything in the subtree carries an operation. */

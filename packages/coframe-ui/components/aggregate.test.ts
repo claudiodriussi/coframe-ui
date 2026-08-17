@@ -61,6 +61,16 @@ describe('what travels, and what stays home', () => {
     expect(liveRows(agg.root, 'authors')).toHaveLength(2);
   });
 
+  it('reads a collection that does not exist without creating it', () => {
+    // A count beside a button label reads the buffer while rendering, and
+    // Svelte refuses a write inside a derived: on a new record, where nothing
+    // has been added yet, creating the key on read blanked the whole form.
+    const agg = newAggregate('book_form');
+
+    expect(liveRows(agg.root, 'authors')).toEqual([]);
+    expect(agg.root.children).toEqual({});
+  });
+
   it('keeps a saved row in the buffer, wearing its deletion', () => {
     const agg = loadedAggregate('book_form', loaded());
     removeRow(agg.root, 'authors', 42);
