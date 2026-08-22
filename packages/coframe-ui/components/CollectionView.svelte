@@ -146,12 +146,18 @@
    *
    * A new row is created detached and attached only on confirm — cancelling then
    * leaves nothing behind. The frame is told which fields the parent supplies:
-   * the foreign key always, and the key itself while it is still a negative
+   * the foreign key always, the key itself while it is still a negative
    * placeholder, because a number the save is about to replace has no business
-   * on screen (§17).
+   * on screen (§17), and whatever `defaults` stamps.
+   *
+   * The stamped fields are hidden for the same reason the node stamps them: they
+   * are the other half of `domain`, so editing one moves the row out of the view
+   * that made it — a tab emptying itself under the hands of whoever typed. What
+   * a grid filters for is not a value of the row you are editing.
    */
   function openRow(target: TreeNode, isNew: boolean) {
     const editing = cloneNode(target);
+    const stamped = Object.keys(node.defaults ?? {});
 
     stack.push(DataFormView, {
       formId,
@@ -160,7 +166,7 @@
       title: node.label ?? fallbackLabel ?? node.model,
       buffer: { agg, node: editing },
       defaults: isNew ? node.defaults : undefined,
-      hideFields: isNew ? [node.fk, pkField] : [node.fk],
+      hideFields: isNew ? [node.fk, pkField, ...stamped] : [node.fk, ...stamped],
       onSaved: () => {
         if (isNew) {
           // The key is the buffer's until the save assigns a real one: the grid
