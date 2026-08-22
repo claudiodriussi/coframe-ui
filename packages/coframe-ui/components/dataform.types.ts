@@ -87,9 +87,13 @@ export interface FormPolicy {
 
 // ── Layout engine node types ───────────────────────────────────────────────
 
-/** A field inside a column — width can be '30%', '80px', or omitted (fills remaining). */
+/**
+ * A field inside a column — width can be '30%', '80px', a number of px, or
+ * omitted (fills what is left). A percentage is a share of the line with the
+ * gap already taken out of it, so shares that add up to 100% fit on one line.
+ */
 export interface SectionField extends FormField {
-  width?: string;
+  width?: string | number;
 }
 
 /** Zero-height flex item that forces the next field to a new row. YAML: `- filler:` */

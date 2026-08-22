@@ -249,6 +249,24 @@
     return `width: ${w}; flex: none`;
   }
 
+  /**
+   * CSS style for a field inside a layout column, where fields flow and wrap.
+   *
+   * No width takes an equal share of what is left on the line. A percentage is a
+   * share of the line, and the line also carries the gaps between the fields:
+   * one gap is taken out of each share, so widths that add up to 100% stay on
+   * one line instead of dropping the last field onto the next one — the author
+   * does the arithmetic that reads right, and the engine does not undo it.
+   * An absolute width is left alone: it was asked for exactly.
+   */
+  function columnFieldFlex(w: string | number | undefined): string {
+    if (w == null) return 'flex: 1 1 0';
+    const width = typeof w === 'number' ? `${w}px` : String(w).trim();
+    return width.endsWith('%')
+      ? `flex: 0 0 calc(${width} - var(--cf-form-gap, 1rem))`
+      : `flex: 0 0 ${width}`;
+  }
+
   // ── Widget resolution ──────────────────────────────────────────────────────
 
   function resolveWidget(field: FormField): string {
@@ -1089,7 +1107,7 @@
 {/snippet}
 
 {#snippet columnFields(fields: (SectionField | FillerField)[])}
-  <div class="flex flex-wrap gap-x-4">
+  <div class="flex flex-wrap" style="column-gap: var(--cf-form-gap, 1rem)">
     {#each fields.filter((i) => 'filler' in i || !isFieldHidden((i as SectionField).name)) as item}
       {#if 'filler' in item}
         <div style="flex: 0 0 100%; height: 0"></div>
@@ -1097,7 +1115,7 @@
         {@const f = item as SectionField}
         <div
           class="mb-4 min-w-0"
-          style={f.width ? `flex: 0 0 ${f.width}` : 'flex: 1 1 0'}
+          style={columnFieldFlex(f.width)}
           data-field={f.name}
         >
           {@render fieldContent(f)}
