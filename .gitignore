@@ -6,7 +6,10 @@ node_modules
 .netlify
 .wrangler
 .svelte-kit
-build
+# The compiled site of each client. Narrow on purpose: a bare `build` also
+# matched packages/coframe-ui/build/, which is not output at all — it holds the
+# vite/kit factories every client imports, so a fresh clone could not build.
+apps/*/build
 
 # OS
 .DS_Store

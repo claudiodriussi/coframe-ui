@@ -1,3 +1,6 @@
 node_modules
-build
 .svelte-kit
+
+# NOT `build`: this package's build/ is source — the vite and kit factories
+# every client imports (`@coframe/ui/build/vite.js`). Ignoring it left a fresh
+# clone unable to compile anything, and nothing said so.
