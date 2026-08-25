@@ -25,7 +25,10 @@ export const BASE_WIDGET_MAP: Record<string, string> = {
   Integer:     'number',
   Float:       'number',
   Numeric:     'number',
-  Boolean:     'checkbox',
+  // 'boolean', not 'checkbox': these names are looked up by DataForm, which
+  // has no branch for a name nothing produces — a Boolean column not covered
+  // by a plugin type rendered as a text box saying "true".
+  Boolean:     'boolean',
   DateTime:    'datetime',
   Date:        'date',
   Time:        'time',
