@@ -47,9 +47,17 @@ const APP_ROOTS = {
 
 /**
  * Absolute directory of an app-instance — the one holding its `config.yaml`.
+ *
+ * Apps of this repository are found by the table above, or by the convention
+ * `coframe/apps/<name>`. An app that lives anywhere else says where it is,
+ * with COFRAME_APP_ROOT — which is what keeps a symlink into `coframe/apps/`
+ * a convenience for editing both at once, rather than the only way to build.
+ *
  * @param {string} app
  */
 export function appRoot(app) {
+  const given = process.env.COFRAME_APP_ROOT;
+  if (given) return resolve(given);
   return resolve(REPO, APP_ROOTS[app] ?? `coframe/apps/${app}`);
 }
 
@@ -74,14 +82,19 @@ function isInside(child, parent) {
  */
 export function resolveApp({ app, devPort, overridable = false }) {
   const requested = process.env.COFRAME_APP;
-  if (requested && requested !== app) {
+  const givenRoot = process.env.COFRAME_APP_ROOT;
+
+  if ((requested && requested !== app) || givenRoot) {
     if (!overridable) {
       throw new Error(
-        `COFRAME_APP=${requested} but this client is bound to '${app}'. ` +
-          `Custom clients target one backend; use apps/shell to switch app-instance.`
+        `COFRAME_APP${givenRoot ? '_ROOT' : ''} is set but this client is bound to ` +
+          `'${app}'. Custom clients target one backend; use apps/shell to switch ` +
+          `app-instance.`
       );
     }
-    app = requested;
+    // An out-of-repo app has no entry in the table: its name is the one its
+    // own config.yaml declares, read below.
+    app = requested ?? app;
   }
 
   const root = appRoot(app);
@@ -91,6 +104,7 @@ export function resolveApp({ app, devPort, overridable = false }) {
   }
   const config = parse(readFileSync(configPath, 'utf8')) ?? {};
   const api = config.api ?? {};
+  if (givenRoot) app = config.name ?? app;
 
   // Plugin roots come from the same `plugins:` list the backend composes from,
   // so a root added there is seen by the client without a second edit. A root
