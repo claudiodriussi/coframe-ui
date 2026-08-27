@@ -8,8 +8,7 @@
     "dev": "pnpm --filter devtest dev",
     "build": "pnpm --filter devtest build",
     "dev:shell": "pnpm --filter shell dev",
-    "dev:demo": "pnpm --filter shell dev:demo",
-    "build:demo": "COFRAME_APP=demo pnpm --filter shell build",
+    "build:app": "node tools/build-app.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

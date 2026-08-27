@@ -23,13 +23,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(__dirname, '../..');
 
 /**
- * App-instances shipped with this repository. Anything not listed follows the
- * convention `coframe/apps/<name>` (those live outside git).
+ * App-instances this repository knows by name. Only devtest is here: it ships
+ * inside the coframe checkout, which whoever works on the library has anyway,
+ * and `apps/devtest` is a client bound to it. Anything else is found by the
+ * convention `coframe/apps/<name>`, or says where it is with COFRAME_APP_ROOT
+ * — which is how an app in a repository of its own is reached, the commons
+ * demo included.
  * @type {Record<string, string>}
  */
 const APP_ROOTS = {
-  devtest: 'coframe/devtest',
-  demo: 'commons/demo'
+  devtest: 'coframe/devtest'
 };
 
 /**
