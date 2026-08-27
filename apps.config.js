@@ -88,9 +88,9 @@ export function appRoot(app) {
   if (given) return resolve(given);
 
   const relative = APP_ROOTS[app] ?? `coframe/apps/${app}`;
-  // Not found: the path two levels up is the one worth naming in the error,
-  // being where the development workspace puts it.
-  return lookUp(relative) ?? resolve(CLIENT, '..', '..', relative);
+  // Not found: name the nearest place it would have been, which is the one
+  // worth naming in the error that follows.
+  return lookUp(relative) ?? resolve(CLIENT, '..', relative);
 }
 
 /**
@@ -135,7 +135,8 @@ export function resolveApp({ app, devPort, overridable = false }) {
     throw new Error(
       `App-instance '${app}': no config.yaml at ${configPath}\n` +
         `This client is bound to '${app}', which lives in the coframe checkout ` +
-        `beside this one. To point the shell at an application of your own:\n` +
+        `beside this one — looked for up to ${REACH} levels above this ` +
+        `repository. To point the shell at an application of your own:\n` +
         `  COFRAME_APP_ROOT=/path/to/app pnpm --filter shell dev\n` +
         `or, from that application's directory: coframe dev`
     );
