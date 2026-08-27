@@ -19,8 +19,33 @@ import { parse } from 'yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** Repository root: client/svelte → client → repo. */
-const REPO = resolve(__dirname, '../..');
+/** This repository. */
+const CLIENT = __dirname;
+
+/** How far above this repository a workspace is looked for. */
+const REACH = 3;
+
+/**
+ * The workspace directory that holds `relative`, looked for above this
+ * repository.
+ *
+ * Which is not the same as counting levels: cloned from GitHub this repository
+ * is `<workspace>/coframe-ui`, and in the development workspace it is
+ * `<workspace>/client/svelte` — one arrangement of the same siblings, and
+ * neither is the right one to hard-code.
+ *
+ * @param {string} relative  path of an app-instance, relative to a workspace
+ * @returns {string|null} the absolute app directory, when one was found
+ */
+function lookUp(relative) {
+  let directory = CLIENT;
+  for (let level = 0; level < REACH; level++) {
+    directory = dirname(directory);
+    const candidate = resolve(directory, relative);
+    if (existsSync(resolve(candidate, 'config.yaml'))) return candidate;
+  }
+  return null;
+}
 
 /**
  * App-instances this repository knows by name. Only devtest is here: it ships
@@ -61,7 +86,11 @@ const APP_ROOTS = {
 export function appRoot(app) {
   const given = process.env.COFRAME_APP_ROOT;
   if (given) return resolve(given);
-  return resolve(REPO, APP_ROOTS[app] ?? `coframe/apps/${app}`);
+
+  const relative = APP_ROOTS[app] ?? `coframe/apps/${app}`;
+  // Not found: the path two levels up is the one worth naming in the error,
+  // being where the development workspace puts it.
+  return lookUp(relative) ?? resolve(CLIENT, '..', '..', relative);
 }
 
 /**
@@ -103,7 +132,13 @@ export function resolveApp({ app, devPort, overridable = false }) {
   const root = appRoot(app);
   const configPath = resolve(root, 'config.yaml');
   if (!existsSync(configPath)) {
-    throw new Error(`App-instance '${app}': no config.yaml at ${configPath}`);
+    throw new Error(
+      `App-instance '${app}': no config.yaml at ${configPath}\n` +
+        `This client is bound to '${app}', which lives in the coframe checkout ` +
+        `beside this one. To point the shell at an application of your own:\n` +
+        `  COFRAME_APP_ROOT=/path/to/app pnpm --filter shell dev\n` +
+        `or, from that application's directory: coframe dev`
+    );
   }
   const config = parse(readFileSync(configPath, 'utf8')) ?? {};
   const api = config.api ?? {};
