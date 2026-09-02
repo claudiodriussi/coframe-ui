@@ -146,11 +146,24 @@ export function resolveApp({ app, devPort, overridable = false }) {
   if (givenRoot) app = config.name ?? app;
 
   // Plugin roots come from the same `plugins:` list the backend composes from,
-  // so a root added there is seen by the client without a second edit. A root
-  // nested inside another is dropped: the outer glob already covers it, and the
-  // duplicate would only produce components discovered twice.
+  // so a root added there is seen by the client without a second edit. An entry
+  // is a path, or the mapping the backend also accepts — `{ path, include }`,
+  // which is how a shared root is taken in part. A root nested inside another is
+  // dropped: the outer glob already covers it, and the duplicate would only
+  // produce components discovered twice.
   const declared = [
-    ...new Set(/** @type {string[]} */ (config.plugins ?? ['plugins']).map((p) => resolve(root, p)))
+    ...new Set(
+      (config.plugins ?? ['plugins']).map((entry) => {
+        const given = typeof entry === 'string' ? entry : entry?.path;
+        if (typeof given !== 'string') {
+          throw new Error(
+            `${configPath}: a plugin root is a path, or a mapping with one — ` +
+              `got ${JSON.stringify(entry)}`
+          );
+        }
+        return resolve(root, given);
+      })
+    )
   ];
   const pluginRoots = declared.filter((r) => !declared.some((other) => isInside(r, other)));
 
