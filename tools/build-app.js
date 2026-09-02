@@ -4,6 +4,7 @@
  * serves it from.
  *
  *   pnpm build:app /path/to/myapp        →  myapp/static/
+ *   pnpm build:app devtest               →  the app-instance of that name
  *
  * An application does not own a client: it contributes UI through the .svelte
  * files of its plugins, and the generic shell — the only re-pointable client —
@@ -18,6 +19,7 @@ import { spawnSync } from 'child_process';
 import { cpSync, existsSync, rmSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
+import { appRoot } from '../apps.config.js';
 
 /** This repository — the parent of tools/. */
 export const CLIENT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -28,15 +30,21 @@ export const SHELL_BUILD = resolve(CLIENT, 'apps/shell/build');
 /**
  * The application to build for, from the command line.
  *
+ * A path is a path; a bare word is an app-instance this repository knows by
+ * name, resolved the same way a client resolves its own binding — so the
+ * scripts here can name `devtest` without knowing where the coframe checkout
+ * that holds it sits.
+ *
  * @param {string[]} argv  arguments after the script name
  * @returns {string} absolute application directory
  */
 export function appDirectory(argv) {
   const [given] = argv;
   if (!given) {
-    throw new Error('usage: pnpm build:app <app-directory>');
+    throw new Error('usage: pnpm build:app <app-directory|app-name>');
   }
-  const app = resolve(given);
+  const isName = !/[/\\]/.test(given) && given !== '.' && given !== '..';
+  const app = isName ? appRoot(given) : resolve(given);
   if (!existsSync(resolve(app, 'config.yaml'))) {
     throw new Error(`${app} holds no config.yaml — is it an application?`);
   }

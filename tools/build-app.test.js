@@ -28,6 +28,11 @@ describe('the target', () => {
     expect(() => appDirectory([])).toThrow(/usage/);
   });
 
+  it('takes a bare word as an app-instance of this repository', () => {
+    expect(() => appDirectory(['nosuchapp']))
+      .toThrow(/coframe[/\\]apps[/\\]nosuchapp/);
+  });
+
   it('has to be an application', () => {
     const notAnApp = mkdtempSync(resolve(tmpdir(), 'coframe-none-'));
     expect(() => appDirectory([notAnApp])).toThrow(/no config.yaml/);
