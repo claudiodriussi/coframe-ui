@@ -23,6 +23,22 @@ type StackPage = {
   onReturn?: (data?: unknown) => void;
 };
 
+/**
+ * An id for a frame, unique within this page.
+ *
+ * Not `crypto.randomUUID()` alone: that exists only in a secure context —
+ * HTTPS, or localhost. Served over plain HTTP from any other host, which is
+ * what a compiled client on a LAN is, it is undefined and every push throws.
+ * Nothing here needs a UUID's guarantees; it needs a key no other frame has.
+ */
+let counter = 0;
+function frameId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `frame-${Date.now().toString(36)}-${(counter += 1)}`;
+}
+
 export function createStack() {
   const { subscribe, update } = writable<StackPage[]>([]);
 
@@ -34,7 +50,7 @@ export function createStack() {
       props: Record<string, unknown> = {},
       onReturn?: (data?: unknown) => void
     ): string {
-      const id = crypto.randomUUID();
+      const id = frameId();
       update((pages) => [...pages, { id, component, props, onReturn }]);
       return id;
     },
