@@ -14,6 +14,12 @@ export interface DialogOptions {
   message: string;
   /** Shown in a collapsible <pre> block — tracebacks, YAML/JS errors */
   detail?: string;
+  /**
+   * What the collapsed block is called. The default says "technical details",
+   * which is right for a traceback and wrong for the answer of an operation
+   * that just did some work — that one is a report, and reads as one.
+   */
+  detailLabel?: string;
   variant?: DialogVariant;
   /** true = Esc and outside-click do NOT close the dialog */
   modal?: boolean;
@@ -24,6 +30,7 @@ interface ActiveDialog {
   title?: string;
   message: string;
   detail?: string;
+  detailLabel?: string;
   variant: DialogVariant;
   modal: boolean;
   buttons: DialogButton[];

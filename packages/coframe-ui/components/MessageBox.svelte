@@ -93,7 +93,7 @@
                      fill="currentColor" viewBox="0 0 20 20">
                   <path d="M6 6l8 4-8 4V6z"/>
                 </svg>
-                Vedi dettagli tecnici
+                {active.detailLabel ?? 'Vedi dettagli tecnici'}
               </summary>
 
               <div class="relative mt-2">

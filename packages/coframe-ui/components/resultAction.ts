@@ -50,6 +50,7 @@ export async function applyResult(response: unknown, ctx: ResultContext): Promis
     title: ctx.title,
     message: (body.message as string) ?? (payload.message as string) ?? _('Done'),
     detail: body.detail as string | undefined,
+    detailLabel: body.detail_label as string | undefined ?? _('Show what was done'),
     variant: 'info',
     buttons: [{ label: 'OK', value: undefined, variant: 'primary' }],
   });
