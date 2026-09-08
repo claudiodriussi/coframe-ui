@@ -8,9 +8,12 @@
    * whatever was open before.
    */
   import { api } from '$coframe/api/client';
-  import { stack } from '$coframe/stack/stack.svelte';
+  import { getContext } from 'svelte';
+  import { stack as globalStack, type StackInstance } from '$coframe/stack/stack.svelte';
   import PanelPage from './PanelPage.svelte';
   import { resolveIcon } from './icons';
+  import { msgbox } from './msgbox.svelte';
+  import { applyResult } from './resultAction';
 
   interface MenuNode {
     id: string;
@@ -18,6 +21,10 @@
     icon?: string;
     action?: string;
     panel?: string;
+    /** action: endpoint — the operation, its arguments, and what to ask first */
+    op?: string;
+    params?: Record<string, unknown>;
+    confirm?: string;
     children?: MenuNode[];
     [key: string]: unknown;
   }
@@ -28,10 +35,14 @@
 
   let { rootId = 'main' }: Props = $props();
 
+  const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
+
   let items = $state<MenuNode[]>([]);
   let error = $state<string | null>(null);
   let activeId = $state<string | null>(null);
   let expanded = $state<Set<string>>(new Set());
+  /** The item whose operation is running: it must not be clicked twice. */
+  let running = $state<string | null>(null);
 
   function collectGroupIds(nodes: MenuNode[]): string[] {
     const ids: string[] = [];
@@ -66,11 +77,35 @@
     expanded = next;
   }
 
-  function open(node: MenuNode) {
+  async function open(node: MenuNode) {
+    if (node.action === 'endpoint') return runEndpoint(node);
     if (node.action !== 'stack_push' || !node.panel) return;
     activeId = node.id;
     stack.clear();
     stack.push(PanelPage, { panelId: node.panel });
+  }
+
+  /**
+   * `action: endpoint` — a menu item that DOES something instead of opening a
+   * page (menu.md §5). The client stays generic: it knows how to ask, how to
+   * confirm and what to do with an answer, and nothing about what the operation
+   * means. `confirm` is a yes/no question and only that — an operation that
+   * needs a *value* is a page, not a menu item that fires. What the answer
+   * turns into is `applyResult`, shared with every other place a command runs.
+   */
+  async function runEndpoint(node: MenuNode) {
+    const confirmText = typeof node.confirm === 'string' ? node.confirm : null;
+    if (confirmText && !(await msgbox.confirm(confirmText, node.label))) return;
+
+    running = node.id;
+    try {
+      const res = await api.endpoint(node.op as string, (node.params ?? {}) as Record<string, unknown>);
+      await applyResult(res, { title: node.label, stack });
+    } catch (e) {
+      await msgbox.error(e instanceof Error ? e.message : String(e), undefined, node.label);
+    } finally {
+      running = null;
+    }
   }
 
   // Keyed on what it fetches: an effect re-runs whenever anything it read
@@ -100,7 +135,9 @@
           class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-gray-700 hover:bg-gray-100"
           class:bg-gray-100={activeId === node.id}
           class:font-medium={isGroup}
+          class:opacity-60={running === node.id}
           style="padding-left: {8 + depth * 14}px"
+          disabled={running === node.id}
           onclick={() => (isGroup ? toggle(node.id) : open(node))}
         >
           {#if Icon}
