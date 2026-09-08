@@ -20,6 +20,13 @@ export interface OrderSpec {
 }
 
 export interface QueryExtras {
+  /**
+   * The table's primary key, so the select always carries something that names
+   * the row. Defaults to `id` when the caller does not know it yet (the schema
+   * may not have arrived) — which is right for most tables and wrong loudly,
+   * not silently, for the others.
+   */
+  pk?: string;
   /** The rule editor's flat list; blocks and payload are derived from it. */
   rules?: RuleRow[];
   /** Quick search text — expanded server-side over the table's search fields. */
@@ -116,11 +123,17 @@ export function buildQuery(
 ): Record<string, unknown> {
   const q: Record<string, unknown> = { table: src.model };
 
-  // select: use descriptor column fields (QB select expressions), always include id
+  // select: the descriptor's column fields, plus the key — a row the grid cannot
+  // name is a row it cannot edit, select or delete.
+  //
+  // The key is the table's own, not the literal `id`: a taxonomy keyed by its
+  // code (`A1`…`A25`) has no `id`, and asking for one made the whole list fail
+  // with a 400 the person only saw as an empty grid.
   if (columns && columns.length > 0) {
+    const pk = extras?.pk || 'id';
     const fields = columns.map(c => c.field);
-    const hasId = fields.some(f => f === 'id' || extractFieldKey(f) === 'id');
-    if (!hasId) fields.unshift('id');
+    const hasPk = fields.some(f => f === pk || extractFieldKey(f) === pk);
+    if (!hasPk) fields.unshift(pk);
     q.select = fields;
   }
 

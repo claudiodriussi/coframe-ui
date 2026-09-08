@@ -407,7 +407,7 @@
     waitingForTrigger = false;
 
     if (src?.model) {
-      const q = buildQuery(src, view.columns, trig, extras);
+      const q = buildQuery(src, view.columns, trig, { ...extras, pk: pkField });
 
       loading = true;
       error = null;
@@ -487,7 +487,7 @@
     const src = view.source;
     if (!src?.model) return;
 
-    const q = buildQuery(src, view.columns, trigger ?? {}, queryExtras);
+    const q = buildQuery(src, view.columns, trigger ?? {}, { ...queryExtras, pk: pkField });
     q.offset = rowCount;
     if (n > 0) q.limit = n;
 

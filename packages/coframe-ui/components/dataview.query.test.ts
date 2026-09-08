@@ -136,3 +136,23 @@ describe('helpers', () => {
     expect(mergeDomain(src(), {})).toBeUndefined();
   });
 });
+
+describe('the key in the select', () => {
+  const columns = [{ field: 'descrizione' }] as any;
+
+  it('adds the table key, not the literal id', () => {
+    const q = buildQuery({ model: 'Attivita' } as any, columns, {}, { pk: 'codice' });
+    expect(q.select).toEqual(['codice', 'descrizione']);
+  });
+
+  it('does not add it twice when a column already shows it', () => {
+    const cols = [{ field: 'codice' }, { field: 'descrizione' }] as any;
+    const q = buildQuery({ model: 'Attivita' } as any, cols, {}, { pk: 'codice' });
+    expect(q.select).toEqual(['codice', 'descrizione']);
+  });
+
+  it('falls back to id when the caller does not know the key yet', () => {
+    const q = buildQuery({ model: 'Book' } as any, columns, {}, {});
+    expect(q.select).toEqual(['id', 'descrizione']);
+  });
+});
