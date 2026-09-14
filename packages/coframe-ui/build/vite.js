@@ -14,7 +14,7 @@ import { coframePluginGlobs } from './plugin-globs.js';
  * @returns {import('vite').UserConfigFnObject}  pass to defineConfig()
  */
 export function coframeVite(app) {
-  return ({ mode, command }) => {
+  return ({ mode }) => {
     // Two layers: `.env.<mode>` holds what is shared (development/production),
     // `.env.<app>` what belongs to one app-instance and wins. Both are optional
     // — they exist to override the values derived from the backend config.yaml.
@@ -23,8 +23,12 @@ export function coframeVite(app) {
       ...loadEnv(app.app, process.cwd(), '')
     };
 
-    // A production build is served by the backend itself, same origin.
-    const apiBase = env.VITE_API_BASE_URL ?? (command === 'build' ? '' : app.apiBase);
+    // One origin in every form. A production build is served by the backend
+    // itself; in dev the calls go to the Vite server, whose proxy below hands
+    // them to the backend — so the browser never sees two origins and no
+    // server needs CORS. VITE_API_BASE_URL is for the one setup that does
+    // (client and backend on different machines), and then CORS is its price.
+    const apiBase = env.VITE_API_BASE_URL ?? '';
     const apiPrefix = env.VITE_API_PREFIX ?? app.apiPrefix;
     const endpointPrefix = env.VITE_API_ENDPOINT_PREFIX ?? app.endpointPrefix;
 
@@ -46,7 +50,7 @@ export function coframeVite(app) {
           // every backend plugin root: full-stack plugin .svelte live outside the client.
           allow: ['../..', ...app.pluginRoots]
         },
-        // In dev the API can also be reached through the proxy (same origin, no CORS).
+        // The API, on the port the backend's config.yaml declares.
         proxy: {
           [`/${apiPrefix}`]: {
             target: app.apiBase,

@@ -70,7 +70,7 @@ const APP_ROOTS = {
  * @property {number} devPort         port of the client's dev server
  * @property {string} apiPrefix       API route prefix
  * @property {string} endpointPrefix  dispatcher prefix
- * @property {string} apiBase         backend base URL in dev
+ * @property {string} apiBase         backend base URL, the target of the dev proxy
  */
 
 /**
