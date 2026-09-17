@@ -41,6 +41,13 @@ export interface QueryExtras {
    * the *whole* set is asked for, deliberately, along with the conditions.
    */
   order?: OrderSpec[];
+  /**
+   * Keys the server asked the view to carry, verbatim, on every query — the
+   * answer of a command such as `{action: 'set_query_params'}`. The view does
+   * not read them: what `include_archived` means is between the command that
+   * set it and the query behavior that honours it.
+   */
+  params?: Record<string, unknown>;
 }
 
 // ── Field key extraction ───────────────────────────────────────────────────
@@ -121,7 +128,8 @@ export function buildQuery(
   trig: Record<string, unknown>,
   extras?: QueryExtras,
 ): Record<string, unknown> {
-  const q: Record<string, unknown> = { table: src.model };
+  // The opaque params go in first: what the view builds itself wins over them.
+  const q: Record<string, unknown> = { ...(extras?.params ?? {}), table: src.model };
 
   // select: the descriptor's column fields, plus the key — a row the grid cannot
   // name is a row it cannot edit, select or delete.

@@ -77,11 +77,31 @@
                 {active.title}
               </Dialog.Title>
             {/if}
-            <Dialog.Description class="mt-0.5 text-sm text-gray-600">
-              {active.message}
-            </Dialog.Description>
+            {#if active.message}
+              <Dialog.Description class="mt-0.5 text-sm text-gray-600">
+                {active.message}
+              </Dialog.Description>
+            {/if}
           </div>
         </div>
+
+        <!-- ── Choices (one pick from a list) ─────────────────────────── -->
+        {#if active.choices}
+          <div class="cf-choices" role="menu">
+            {#each active.choices as c (c.label)}
+              <button
+                type="button"
+                role="menuitem"
+                class="cf-choice"
+                class:cf-choice-current={c.current}
+                onclick={() => msgbox.respond(c.value)}
+              >
+                <span class="cf-choice-mark" aria-hidden="true">{c.current ? '●' : ''}</span>
+                {c.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
 
         <!-- ── Detail block (collapsible) ─────────────────────────────── -->
         {#if active.detail}
@@ -129,3 +149,31 @@
     </Dialog.Portal>
   </Dialog.Root>
 {/if}
+
+<style>
+  .cf-choices {
+    display: flex;
+    flex-direction: column;
+    padding: 0 1.25rem 0.75rem;
+  }
+  .cf-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    text-align: left;
+    font-size: 0.875rem;
+    color: var(--cf-text);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+  }
+  .cf-choice:hover { background: var(--cf-surface-hover); }
+  .cf-choice-current { font-weight: 600; }
+  .cf-choice-mark {
+    width: 0.75rem;
+    font-size: 0.5rem;
+    color: var(--cf-accent);
+  }
+</style>

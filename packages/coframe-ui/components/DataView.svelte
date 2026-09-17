@@ -26,6 +26,7 @@
   import type { SchemaFieldInfo } from '$coframe/api/serverConfig.svelte';
   import { resolveFormatter } from '$coframe/formatters/registry';
   import { msgbox } from './msgbox.svelte';
+  import { applyResult } from './resultAction';
   import { stack as globalStack } from '$coframe/stack/stack.svelte';
   import type { StackInstance } from '$coframe/stack/stack.svelte';
   import {
@@ -72,6 +73,8 @@
     rules?: RuleRow[];
     /** The order asked of the server, when the user chose one over the view's. */
     order?: OrderSpec[];
+    /** Keys a command asked the view to carry on every query (opaque). */
+    params?: Record<string, unknown>;
   }
 
   // ── Props ──────────────────────────────────────────────────────────────────
@@ -142,6 +145,10 @@
   // is not a state worth expressing, since the server ends every paginated
   // query with the key anyway.
   let userOrder = $state<OrderSpec[]>(savedState?.order ?? []);
+  // What a command answered with `set_query_params`: carried on every query,
+  // never read here. Part of the chosen set, so it restarts the fetch like a
+  // rule does, and goes fresh on open like everything else.
+  let queryParams = $state<Record<string, unknown>>(savedState?.params ?? {});
   let filteredCount = $state<number | null>(null);
   let selectedCount = $state(0);
   let tabulatorReady = $state(false);
@@ -169,6 +176,7 @@
     rules: ruleRows,
     search: quickSearch,
     order: userOrder.length > 0 ? userOrder : undefined,
+    params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
   });
 
   // The descriptor's own order, in the shape the editor's order row shows: it
@@ -236,6 +244,7 @@
       search: quickSearch,
       rules: ruleRows,
       order: userOrder,
+      params: queryParams,
     };
     try { localStorage.setItem(getStateKey(), JSON.stringify(state)); } catch (_) {}
   }
@@ -697,6 +706,51 @@
     openForm(null, true);
   }
 
+  // ── Navigator commands ─────────────────────────────────────────────────────
+  // A command declared in the view's YAML names an endpoint and nothing else.
+  // The view sends the whole situation — the table, the active row, the ticked
+  // rows, the params in force — whatever the scope: the scope decides when the
+  // button is enabled, the server decides what to make of the rest. The answer
+  // goes through `applyResult` like every other operation's.
+
+  async function handleNavCommand(cmd: CommandItem) {
+    if (!cmd.endpoint) {
+      console.error(`[DataView] Command "${cmd.id}" names no endpoint.`);
+      return;
+    }
+    const activeId = _activeRowData ? (_activeRowData as any)[pkField] : undefined;
+    const selectedIds = tableRef?.getSelectedData().map((r: any) => r[pkField]) ?? [];
+    const payload: Record<string, unknown> = {
+      ...((cmd.params as Record<string, unknown> | undefined) ?? {}),
+      table: view.source?.model,
+      query_params: queryParams,
+    };
+    if (activeId != null) payload.id = activeId;
+    if (selectedIds.length > 0) payload.ids = selectedIds;
+
+    try {
+      const res = await api.endpoint(cmd.endpoint, payload);
+      await applyResult(res, {
+        title: cmd.label,
+        stack,
+        setQueryParams,
+        reload: reloadData,
+      });
+    } catch (e) {
+      await msgbox.error(e instanceof Error ? e.message : String(e), undefined, cmd.label);
+    }
+  }
+
+  /** Merge what the server sent; a null value drops the key. */
+  function setQueryParams(params: Record<string, unknown>) {
+    const next = { ...queryParams };
+    for (const [k, v] of Object.entries(params)) {
+      if (v === null || v === undefined) delete next[k];
+      else next[k] = v;
+    }
+    queryParams = next;
+  }
+
   function handleNavEdit() {
     if (_activeRowData == null) return;
     if (navigatorMode === 'buffered') { onEvent?.('row_edit', _activeRowData); return; }
@@ -812,6 +866,7 @@
       onAdd={handleNavAdd}
       onEdit={handleNavEdit}
       onDelete={handleNavDelete}
+      onCommand={handleNavCommand}
       onToggleFilter={toggleFilter}
       onToggleSelect={toggleSelect}
       onExport={handleExport}

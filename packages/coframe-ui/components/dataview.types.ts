@@ -66,6 +66,7 @@ export interface CommandItem {
   scope?: 'row' | 'selection' | 'global';
   toolbar?: boolean;   // true → shown as direct button in navigator
   endpoint?: string;   // endpoint to call when activated
+  params?: Record<string, unknown>;  // sent along with the view's context
   [key: string]: unknown;
 }
 

@@ -9,6 +9,13 @@ export interface DialogButton {
   variant?: ButtonVariant;
 }
 
+export interface DialogChoice {
+  label: string;
+  value: unknown;
+  /** The one in force now — shown as such, so the list also reads as state. */
+  current?: boolean;
+}
+
 export interface DialogOptions {
   title?: string;
   message: string;
@@ -23,6 +30,8 @@ export interface DialogOptions {
   variant?: DialogVariant;
   /** true = Esc and outside-click do NOT close the dialog */
   modal?: boolean;
+  /** A vertical list to pick from; each entry resolves with its value. */
+  choices?: DialogChoice[];
   buttons: DialogButton[];
 }
 
@@ -33,6 +42,7 @@ interface ActiveDialog {
   detailLabel?: string;
   variant: DialogVariant;
   modal: boolean;
+  choices?: DialogChoice[];
   buttons: DialogButton[];
 }
 
@@ -96,6 +106,21 @@ export const msgbox = {
       modal: false,
       buttons: [{ label: _('Close'), value: undefined, variant: 'secondary' }],
     }) as Promise<void>;
+  },
+
+  /**
+   * One pick from a list. Resolves with the chosen value, or undefined when
+   * dismissed — the caller then does nothing, which is what a closed menu means.
+   */
+  choose(choices: DialogChoice[], title?: string, message?: string): Promise<unknown> {
+    return show({
+      title,
+      message: message ?? '',
+      variant: 'info',
+      modal: false,
+      choices,
+      buttons: [{ label: _('Cancel'), value: undefined, variant: 'secondary' }],
+    });
   },
 
   /** Fully custom — escape hatch for multi-button or non-standard cases */
