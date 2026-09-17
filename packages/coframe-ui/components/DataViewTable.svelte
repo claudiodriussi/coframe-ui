@@ -79,6 +79,7 @@
   export function getAdjacentRowId(id: unknown): unknown                       { return tableRef?.getAdjacentRowId(id) ?? null; }
   export async function deleteRow(id: unknown): Promise<void>                  { return tableRef?.deleteRow(id); }
   export function updateRow(id: unknown, data: Record<string, unknown>)        { tableRef?.updateRow(id, data); }
+  export function hasRow(id: unknown): boolean                                 { return tableRef?.hasRow(id) ?? false; }
 </script>
 
 <DataTable

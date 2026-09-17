@@ -649,15 +649,8 @@
       defaults: isNew ? view.source?.defaults : undefined,
       title: label,
       onSaved: (savedData: Record<string, unknown>) => {
-        if (isNew) {
-          const newId = savedData[pkField];
-          if (newId != null) _internalFocusId = newId;
-          tableRef?.addRows([savedData]);
-          if (totalCount !== null) totalCount++;
-        } else if (recordId != null) {
-          tableRef?.updateRow(recordId, savedData);
-          setTimeout(() => tableRef?.focusRowById(recordId), 0);
-        }
+        const id = isNew ? savedData[pkField] : recordId;
+        if (id != null) refreshRows([id]);
       },
       onCancel: () => {
         if (recordId != null) queueMicrotask(() => tableRef?.focusRowById(recordId));
@@ -672,6 +665,54 @@
     alignsInferred = false;
     restoreComplete = false;
     loadData();
+  }
+
+  // ── Rows that were touched ─────────────────────────────────────────────────
+  // After a record is saved, deleted or changed by a command, the view asks
+  // the server for those keys with its own query — same columns and joins,
+  // same filters, rules, params and behaviors. A row that comes back is
+  // updated in place (joined fields included), one that does not is dropped,
+  // one that was not there is added: whether the record still belongs to the
+  // list is decided where the filters actually run, not by comparing fields
+  // here. Pagination, scroll and focus stay where they are. A row whose new
+  // values would sort it elsewhere stays put until the next load — moving it
+  // under the user's eyes is worse than a list one step behind its order.
+
+  async function refreshRows(ids: unknown[]) {
+    const src = view.source;
+    if (!src?.model || !tableRef || ids.length === 0) return;
+    if (view.type === 'tree') { reloadData(); return; }
+
+    const q = buildQuery(src, view.columns, trigger ?? {}, { ...queryExtras, pk: pkField, only: ids });
+    let fresh: Record<string, unknown>[] = [];
+    try {
+      const res = await api.endpoint('query', { format: 'records', query: q });
+      if (res.status !== 'success') { reloadData(); return; }
+      fresh = (res.data ?? []) as Record<string, unknown>[];
+    } catch { reloadData(); return; }
+
+    const byId = new Map(fresh.map(r => [r[pkField], r]));
+    const activeId = _activeRowData ? (_activeRowData as any)[pkField] : null;
+    let focusId: unknown = activeId;
+    let delta = 0;
+
+    for (const id of ids) {
+      const row = byId.get(id);
+      const loaded = tableRef.hasRow(id);
+      if (row && loaded) {
+        tableRef.updateRow(id, row);
+      } else if (row) {
+        await tableRef.addRows([row]);
+        focusId = id;
+        delta++;
+      } else if (loaded) {
+        if (id === activeId) { focusId = tableRef.getAdjacentRowId(id); _activeRowData = null; }
+        await tableRef.deleteRow(id);
+        delta--;
+      }
+    }
+    if (totalCount !== null) totalCount += delta;
+    if (focusId != null) queueMicrotask(() => tableRef?.focusRowById(focusId));
   }
 
   function handleNavAccept() {
@@ -734,6 +775,7 @@
         title: cmd.label,
         stack,
         setQueryParams,
+        refreshRows,
         reload: reloadData,
       });
     } catch (e) {
@@ -777,14 +819,10 @@
     const model = view.source?.model as string | undefined;
     if (!model) return;
     try {
-      const adjacentId = tableRef?.getAdjacentRowId(id) ?? null;
       const res = await api.endpoint('db', { table: model, method: 'delete', id });
       if (res.status === 'success') {
         _internalFocusId = null;
-        _activeRowData = null;
-        await tableRef?.deleteRow(id);
-        if (totalCount !== null) totalCount--;
-        if (adjacentId != null) queueMicrotask(() => tableRef?.focusRowById(adjacentId));
+        await refreshRows([id]);
       } else {
         msgbox.error(res.message ?? _('Error deleting record'));
       }

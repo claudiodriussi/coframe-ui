@@ -439,6 +439,11 @@ export class CoframeTable {
     this.config.onDataLoaded?.(count);
   }
 
+  /** Whether a row with this id is loaded — the state array may lag behind. */
+  hasRow(id: unknown): boolean {
+    return (this.table?.getRows() ?? []).some((r: any) => r.getData()?.id === id);
+  }
+
   /** Update a single row's fields in place, preserving _meta. */
   updateRow(id: unknown, data: Record<string, unknown>) {
     const rows: any[] = this.table?.getRows() ?? [];

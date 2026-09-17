@@ -156,3 +156,30 @@ describe('the key in the select', () => {
     expect(q.select).toEqual(['id', 'descrizione']);
   });
 });
+
+describe('touched rows', () => {
+  it('asks for the keys as one more group beside what the view already says', () => {
+    const q = buildQuery(
+      src({ domain: [{ active: true }] }), undefined, {},
+      { rules: [rule('city', 'eq', 'Udine')], only: [3, 7], pk: 'id' },
+    );
+    expect(q.filters).toEqual({
+      conditions: [
+        [{ active: true }],
+        [{ city: 'Udine' }],
+        [{ id: ['in', [3, 7]] }],
+      ],
+    });
+  });
+
+  it('names the key the table declares, not a literal id', () => {
+    const q = buildQuery(src(), undefined, {}, { only: ['A1'], pk: 'code' });
+    expect(q.filters).toEqual({ conditions: [{ code: ['in', ['A1']] }] });
+  });
+
+  it('carries the opaque params too, so the behaviors answer the same way', () => {
+    const q = buildQuery(src(), undefined, {}, { only: [1], params: { archived: 'only' } });
+    expect(q.archived).toBe('only');
+    expect(q.filters).toEqual({ conditions: [{ id: ['in', [1]] }] });
+  });
+});

@@ -48,6 +48,13 @@ export interface QueryExtras {
    * set it and the query behavior that honours it.
    */
   params?: Record<string, unknown>;
+  /**
+   * Restrict the query to these keys, everything else unchanged. It is how a
+   * view asks "which of these rows do you still show, and how" after a
+   * record was touched — the answer comes from the same filters, joins and
+   * behaviors as the list itself, so the view never has to guess.
+   */
+  only?: unknown[];
 }
 
 // ── Field key extraction ───────────────────────────────────────────────────
@@ -166,7 +173,7 @@ export function buildQuery(
     ? serializeRuleSet(toBlocks(extras.rules))
     : undefined;
 
-  const filters = mergeDomain(src, trig, rules);
+  const filters = mergeDomain(src, trig, rules, extras?.only, extras?.pk || 'id');
   if (filters !== undefined) {
     q.filters = filters;
   }
@@ -215,11 +222,14 @@ export function mergeDomain(
   src: ViewSource,
   trig: Record<string, unknown>,
   rules?: unknown[],
+  only?: unknown[],
+  pk = 'id',
 ): unknown | undefined {
   const groups = [
     conditionsOf(applyTriggerVars(src.domain, trig)),
     conditionsOf(applyTriggerVars(src.filters, trig)),
     rules && rules.length > 0 ? rules : null,
+    only && only.length > 0 ? [{ [pk]: ['in', only] }] : null,
   ].filter((g): g is unknown[] => g !== null);
 
   if (groups.length === 0) return undefined;

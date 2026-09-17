@@ -9,7 +9,8 @@
  * which, using the same `action` vocabulary as everything else: a scalar verb
  * plus its sibling keys.
  *
- *   {status: 'success', data: {message, detail}}                 → a box
+ *   {status: 'success', data: {message, detail, touched?}}       → a box; the
+ *       view then refreshes the touched keys, or everything when none are named
  *   {status: 'success', data: {action: 'stack_push', panel: …}}  → a page
  *   {action: 'choose', options: [{label, current?, then}]}       → a menu; the
  *       pick's `then` is applied with these same rules
@@ -38,9 +39,11 @@ export interface ResultContext {
   /** Where the view is: how it takes the keys of `set_query_params`. */
   setQueryParams?: (params: Record<string, unknown>) => void;
   /**
-   * Where the view is: called after an answer that reports (a box), because
-   * an operation that reports has done something the rows may show.
+   * Where the view is: an answer that reports (a box) has done something the
+   * rows may show. With `touched` it names the keys and the view refreshes
+   * just those; without, the view reloads.
    */
+  refreshRows?: (ids: unknown[]) => void | Promise<void>;
   reload?: () => void;
 }
 
@@ -102,5 +105,6 @@ async function applyBody(body: Payload, ctx: ResultContext, fallback?: string): 
     variant: 'info',
     buttons: [{ label: 'OK', value: undefined, variant: 'primary' }],
   });
-  ctx.reload?.();
+  if (Array.isArray(body.touched) && ctx.refreshRows) await ctx.refreshRows(body.touched);
+  else ctx.reload?.();
 }

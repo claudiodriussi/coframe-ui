@@ -125,6 +125,7 @@
   export function getAdjacentRowId(id: unknown): unknown                       { return cfTable?.getAdjacentRowId(id) ?? null; }
   export async function deleteRow(id: unknown): Promise<void>                  { return cfTable?.deleteRow(id); }
   export function updateRow(id: unknown, data: Record<string, unknown>)        { cfTable?.updateRow(id, data); }
+  export function hasRow(id: unknown): boolean                                 { return cfTable?.hasRow(id) ?? false; }
 </script>
 
 <div
