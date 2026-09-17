@@ -783,6 +783,24 @@
     }
   }
 
+  // A command's `key` runs it while this view has the focus — the menu shows
+  // "(A)" and the hand learns it. Only a bare letter, and never while typing:
+  // an input, a modifier, or another view on screen are all not this. The
+  // scope still applies, as it does to the click.
+  function handleCommandKey(e: KeyboardEvent) {
+    if (e.ctrlKey || e.altKey || e.metaKey || e.key.length !== 1) return;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+    const commands = (navigatorConfig?.commands ?? []) as CommandItem[];
+    const cmd = commands.find(c => c.key && String(c.key).toLowerCase() === e.key.toLowerCase());
+    if (!cmd) return;
+    if (cmd.scope === 'row' && _activeRowData == null) return;
+    if (cmd.scope === 'selection' && selectedCount === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    handleNavCommand(cmd);
+  }
+
   /** Merge what the server sent; a null value drops the key. */
   function setQueryParams(params: Record<string, unknown>) {
     const next = { ...queryParams };
@@ -883,7 +901,8 @@
   }
 </script>
 
-<div class="cf-dataview">
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="cf-dataview" onkeydown={handleCommandKey}>
 
   <!-- ── Navigator (shown when navigator config present or default browser mode) -->
   {#if showNavigator}

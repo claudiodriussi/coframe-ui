@@ -27,6 +27,7 @@ registerTranslations('it', {
   'Confirm (F12 or Ctrl+Enter)': 'Conferma (F12 o Ctrl+Enter)',
   'Cancel':                   'Annulla',
   'Cancel (Esc)':             'Annulla (Esc)',
+  'Commands':                 'Comandi',
 
   // dataview navigator
   'Add (Ins)':                'Aggiungi (Ins)',

@@ -18,9 +18,10 @@
     Funnel, Search,
     Group, Download, Printer,
     RefreshCw, Ellipsis,
-    ChevronDown, SquareCheckBig,
+    ChevronDown, SquareCheckBig, Zap,
   } from 'lucide-svelte';
   import type { NavigatorConfig, CommandItem } from './dataview.types';
+  import { resolveIcon } from './icons';
   import { _, _t } from '../i18n';
 
   const LOAD_MORE_OPTIONS = [50, 100, 500];
@@ -116,11 +117,23 @@
     return visibleSet.has(id);
   }
 
-  // ── Toolbar commands (scope: toolbar:true) ─────────────────────────────────
+  // ── Commands ───────────────────────────────────────────────────────────────
+  // All of them sit in the [⚡] menu, one place the user learns once; a
+  // command with `toolbar: true` is also a button of its own. The scope only
+  // says when a command can run: what it does is the server's.
 
-  const toolbarCmds = $derived(
-    (config?.commands ?? []).filter(c => c.toolbar)
-  );
+  const commands = $derived(config?.commands ?? []);
+  const toolbarCmds = $derived(commands.filter(c => c.toolbar));
+  let commandsOpen = $state(false);
+
+  function cmdDisabled(cmd: CommandItem): boolean {
+    return cmd.scope === 'row' ? !hasRow : cmd.scope === 'selection' ? !hasSel : false;
+  }
+
+  /** The label with its key, the way the menu teaches it: "Archive (A)". */
+  function cmdLabel(cmd: CommandItem): string {
+    return cmd.key ? `${cmd.label} (${String(cmd.key).toUpperCase()})` : cmd.label;
+  }
 
   // ── Row-active state ───────────────────────────────────────────────────────
 
@@ -180,6 +193,9 @@
 {#if loadMoreOpen}
   <div class="cf-nav-overlay" role="presentation" onclick={() => (loadMoreOpen = false)}></div>
 {/if}
+{#if commandsOpen}
+  <div class="cf-nav-overlay" role="presentation" onclick={() => (commandsOpen = false)}></div>
+{/if}
 
 <div class="cf-navigator">
 
@@ -218,22 +234,46 @@
       </button>
     {/if}
 
-    <!-- Toolbar commands (declared in YAML with toolbar:true) -->
+    <!-- Commands menu (auto — visible when the view declares any) -->
+    {#if commands.length > 0}
+      <div class="cf-nav-loadmore-wrap">
+        <button
+          class="cf-nav-btn"
+          title={_('Commands')}
+          onclick={() => (commandsOpen = !commandsOpen)}
+        >
+          <Zap size={14} />
+        </button>
+        {#if commandsOpen}
+          <div class="cf-nav-loadmore-menu" role="menu">
+            {#each commands as cmd (cmd.id)}
+              <button class="cf-nav-menu-item" role="menuitem"
+                disabled={cmdDisabled(cmd)}
+                onclick={() => { commandsOpen = false; onCommand?.(cmd); }}>
+                {cmdLabel(cmd)}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Promoted commands (toolbar: true) -->
     {#each toolbarCmds as cmd (cmd.id)}
-      {@const disabled = cmd.scope === 'row' ? !hasRow : cmd.scope === 'selection' ? !hasSel : false}
+      {@const Icon = resolveIcon(cmd.icon) ?? Ellipsis}
       <button
         class="cf-nav-btn"
-        title={cmd.label}
-        {disabled}
+        title={cmdLabel(cmd)}
+        disabled={cmdDisabled(cmd)}
         onclick={() => onCommand?.(cmd)}
       >
-        <Ellipsis size={14} />
+        <Icon size={14} />
         <span class="cf-nav-label">{cmd.label}</span>
       </button>
     {/each}
 
     <!-- Separator before data tools -->
-    {#if (isVisible('add') || isVisible('edit') || isVisible('delete') || toolbarCmds.length > 0) && (isVisible('filter') || isVisible('search') || isVisible('export') || isVisible('refresh'))}
+    {#if (isVisible('add') || isVisible('edit') || isVisible('delete') || commands.length > 0) && (isVisible('filter') || isVisible('search') || isVisible('export') || isVisible('refresh'))}
       <span class="cf-nav-sep" aria-hidden="true"></span>
     {/if}
 
@@ -561,6 +601,12 @@
 
   .cf-nav-menu-item:hover {
     background: var(--cf-surface-hover);
+  }
+
+  .cf-nav-menu-item:disabled {
+    color: var(--cf-text-subtle);
+    cursor: default;
+    background: none;
   }
 
   .cf-nav-menu-sep {

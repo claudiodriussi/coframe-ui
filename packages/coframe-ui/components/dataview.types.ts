@@ -62,9 +62,15 @@ export interface ViewTreeConfig {
 export interface CommandItem {
   id: string;
   label: string;
-  icon?: string;
+  icon?: string;       // lucide name, for a promoted button
   scope?: 'row' | 'selection' | 'global';
-  toolbar?: boolean;   // true → shown as direct button in navigator
+  /**
+   * Every command lives in the navigator's [⚡] menu; `toolbar: true` also
+   * promotes it to a button of its own, for the gesture a view is used for.
+   */
+  toolbar?: boolean;
+  /** One key that runs it while the grid has the focus — shown as "(A)". */
+  key?: string;
   endpoint?: string;   // endpoint to call when activated
   params?: Record<string, unknown>;  // sent along with the view's context
   [key: string]: unknown;
