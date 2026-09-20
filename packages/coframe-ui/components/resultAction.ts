@@ -53,9 +53,13 @@ export async function applyResult(response: unknown, ctx: ResultContext): Promis
   const payload = (response ?? {}) as Payload;
 
   if (payload.status === 'error') {
+    // The id is the line in the server's log: what a person reports, and
+    // what turns "it failed" into something that can be looked up.
+    const id = typeof payload.request_id === 'string' ? ` [${payload.request_id.slice(0, 8)}]` : '';
     await msgbox.error(
-      (payload.message as string) ?? _('The operation failed'),
-      ((payload.data ?? {}) as Payload).detail as string | undefined,
+      ((payload.message as string) ?? _('The operation failed')) + id,
+      (((payload.data ?? {}) as Payload).detail as string | undefined)
+        ?? (payload.traceback as string | undefined),
       ctx.title,
     );
     return;
