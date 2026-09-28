@@ -83,6 +83,8 @@ registerTranslations('it', {
   'Add condition':            'Aggiungi condizione',
   'Add alternative':          'Aggiungi alternativa',
   'Clear all':                'Svuota',
+  'Show more…':               'Mostra altri…',
+  'More fields':              'Altri campi',
   'Conditions, search and order back to the view (Apply to confirm)':
     'Condizioni, ricerca e ordinamento tornano quelli della vista (Applica per confermare)',
   'Duplicates this block as an alternative': 'Duplica questo blocco come alternativa',

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterFields, orderFields, fieldPrimitive } from './dataview.fields';
+import { filterFields, orderFields, fieldPrimitive, splitByRank } from './dataview.fields';
 import type { TableInfo, TypeRegistry } from '../api/serverConfig';
 
 const types: TypeRegistry = {
@@ -116,5 +116,43 @@ describe('orderFields', () => {
     ]), types);
     expect(orderFields(fields).map(f => f.name))
       .toEqual(['id', 'title', 'note', 'subtitle']);
+  });
+});
+
+describe('query_rank', () => {
+  const ranked = table([
+    { name: 'id', type: 'ID' },
+    { name: 'memo', type: 'Name', query_rank: 'none' },
+    { name: 'created_at', type: 'DateTime', query_rank: 'more' },
+    { name: 'city', type: 'Name', query_rank: 'low' },
+    { name: 'name', type: 'Name' },
+    { name: 'code', type: 'ShortStr', query_rank: 'top' },
+    { name: 'phone', type: 'Name', query_rank: 'normal' },
+  ]);
+
+  it('orders by rank, keeping the declaration order within one', () => {
+    expect(filterFields(ranked, types).map(f => f.name))
+      .toEqual(['code', 'id', 'name', 'phone', 'city', 'created_at']);
+  });
+
+  it('never offers a column ranked none', () => {
+    expect(filterFields(ranked, types).some(f => f.name === 'memo')).toBe(false);
+  });
+
+  it('puts the more ranks behind "Show more"', () => {
+    const { main, more } = splitByRank(filterFields(ranked, types));
+    expect(main.map(f => f.name)).toEqual(['code', 'id', 'name', 'phone', 'city']);
+    expect(more.map(f => f.name)).toEqual(['created_at']);
+  });
+
+  it('ranks first in the order combo too, the cheap columns first within a rank', () => {
+    const fields = filterFields(table([
+      { name: 'id', type: 'ID' },
+      { name: 'name', type: 'Name' },
+      { name: 'code', type: 'ShortStr', index: true },
+      { name: 'stamp', type: 'DateTime', index: true, query_rank: 'more' },
+      { name: 'code2', type: 'ShortStr', query_rank: 'top' },
+    ]), types);
+    expect(orderFields(fields).map(f => f.name)).toEqual(['code2', 'id', 'code', 'name', 'stamp']);
   });
 });

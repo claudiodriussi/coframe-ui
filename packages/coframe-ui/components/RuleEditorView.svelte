@@ -23,7 +23,7 @@
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
   import RuleValue from './RuleValue.svelte';
   import type { OrderSpec } from './dataview.query';
-  import { filterFields, orderFields, type FilterField } from './dataview.fields';
+  import { filterFields, orderFields, splitByRank, type FilterField } from './dataview.fields';
   import {
     OPERATOR_ARITY, OPERATOR_WORD, operatorsFor, blockConflicts, blockRowIndices, isComplete,
     type RuleRow, type RuleOperator, type ConflictReason,
@@ -55,6 +55,26 @@
 
   const fields = $derived(filterFields(serverConfig.tables[model], serverConfig.types));
   const orderChoices = $derived(orderFields(fields));
+
+  // `query_rank: more` waits behind "Show more…", an entry of the dropdown
+  // itself: a native select has nothing else to click. Once asked, the rest
+  // opens for every row of the editor. A field already chosen always shows in
+  // its own row, whatever its rank — hiding the value in force would lie.
+  const SHOW_MORE = '\u0000more';
+  let showMore = $state(false);
+  const fieldSplit = $derived(splitByRank(fields));
+  const orderSplit = $derived(splitByRank(orderChoices));
+
+  /** A dropdown's change: "Show more…" opens the rest, anything else is a choice. */
+  function pick(e: Event, choose: (value: string) => void, current: string) {
+    const el = e.target as HTMLSelectElement;
+    if (el.value === SHOW_MORE) {
+      showMore = true;
+      el.value = current;
+      return;
+    }
+    choose(el.value);
+  }
 
   function cloneRows(src: RuleRow[]): RuleRow[] {
     return src.map(r => ({ join: r.join, rule: { ...r.rule } }));
@@ -239,6 +259,23 @@
   }
 </script>
 
+{#snippet moreOptions(more: FilterField[], current: string, marked: boolean)}
+  {#if more.length > 0}
+    {#if showMore}
+      <optgroup label={_('More fields')}>
+        {#each more as f (f.name)}
+          <option value={f.name}>{f.label}{marked && f.indexed ? ' ·' : ''}</option>
+        {/each}
+      </optgroup>
+    {:else}
+      {#each more.filter(f => f.name === current) as f (f.name)}
+        <option value={f.name}>{f.label}{marked && f.indexed ? ' ·' : ''}</option>
+      {/each}
+      <option value={SHOW_MORE}>{_('Show more…')}</option>
+    {/if}
+  {/if}
+{/snippet}
+
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="cf-re" onkeydown={handleKey} role="region" aria-label={_('Filter editor')}>
 
@@ -275,11 +312,17 @@
       <div class="cf-re-ctx-row">
         <span class="cf-re-ctx-join"><ArrowUpDown size={13} /></span>
         <span class="cf-re-ctx-label">{_('Order by')}</span>
-        <select class="cf-re-select" bind:value={orderField} aria-label={_('Order by')}>
+        <select
+          class="cf-re-select"
+          value={orderField}
+          onchange={(e) => pick(e, (v) => (orderField = v), orderField)}
+          aria-label={_('Order by')}
+        >
           <option value="">{_t('Default ({order})', { order: defaultOrderLabel })}</option>
-          {#each orderChoices as f (f.name)}
+          {#each orderSplit.main as f (f.name)}
             <option value={f.name}>{f.label}{f.indexed ? ' ·' : ''}</option>
           {/each}
+          {@render moreOptions(orderSplit.more, orderField, true)}
         </select>
         {#if orderField}
           <button
@@ -323,12 +366,13 @@
             <select
               class="cf-re-select cf-re-field"
               value={rule.field}
-              onchange={(e) => setField(i, (e.target as HTMLSelectElement).value)}
+              onchange={(e) => pick(e, (v) => setField(i, v), rule.field)}
               aria-label={_('Field')}
             >
-              {#each fields as f (f.name)}
+              {#each fieldSplit.main as f (f.name)}
                 <option value={f.name}>{f.label}</option>
               {/each}
+              {@render moreOptions(fieldSplit.more, rule.field, false)}
             </select>
 
             <select

@@ -12,7 +12,7 @@
  * `name`, since a rule field is a string either way.
  */
 
-import type { TableInfo, TableColumnInfo, TypeRegistry } from '../api/serverConfig.svelte';
+import type { TableInfo, TableColumnInfo, TypeRegistry, QueryRank } from '../api/serverConfig.svelte';
 import type { RuleOperator } from './dataview.rules';
 import { operatorsFor } from './dataview.rules';
 
@@ -35,6 +35,8 @@ export interface FilterField {
    * archive ordered on a free column is a legitimate request, paid in waiting.
    */
   indexed?: boolean;
+  /** Declared on the column (`query_rank:`); absent means `normal`. */
+  rank?: QueryRank;
 }
 
 // ── Primitive resolution ───────────────────────────────────────────────────
@@ -89,10 +91,22 @@ function humanize(name: string): string {
     .replace(/^./, c => c.toUpperCase());
 }
 
+// A position, not a verdict: `top` opens the list, `low` closes the visible
+// part, `more` waits behind "Show more", `none` is never offered. Within a rank
+// the declaration order holds, so a derived plugin moves a field by giving it a
+// rank, without reordering the columns of the base.
+const RANK_WEIGHT: Record<string, number> = { top: 0, normal: 1, low: 2, more: 3 };
+
+function rankWeight(f: FilterField): number {
+  return RANK_WEIGHT[f.rank ?? 'normal'] ?? RANK_WEIGHT.normal;
+}
+
 /**
- * Every column of the table a rule may name, in declaration order.
+ * Every column of the table a rule may name, by `query_rank` and then in
+ * declaration order.
  *
  * Left out, and why each:
+ *  - `query_rank: none`: the model says nobody asks for it;
  *  - `secret`: not addressable from a client in any direction. The server
  *    refuses a filter or an order naming one, so offering it would build a
  *    picker whose entries produce errors;
@@ -119,7 +133,16 @@ export function filterFields(
     const field = filterField(col, types, pkSet, leading);
     if (field) out.push(field);
   }
-  return out;
+  // Array.prototype.sort is stable: equal ranks keep the declaration order.
+  return out.sort((a, b) => rankWeight(a) - rankWeight(b));
+}
+
+/** The fields shown at once, and the ones behind "Show more". */
+export function splitByRank(fields: FilterField[]): { main: FilterField[]; more: FilterField[] } {
+  return {
+    main: fields.filter(f => f.rank !== 'more'),
+    more: fields.filter(f => f.rank === 'more'),
+  };
 }
 
 function filterField(
@@ -128,7 +151,7 @@ function filterField(
   pkSet: Set<string>,
   leading: Set<string>,
 ): FilterField | null {
-  if (col.secret || col.virtual) return null;
+  if (col.secret || col.virtual || col.query_rank === 'none') return null;
 
   const fk = col.foreign_key;
   const primitive = fk ? 'fk' : fieldPrimitive(col.type, types);
@@ -143,14 +166,16 @@ function filterField(
     ...(pk ? { pk: true } : {}),
     ...(pk || col.index === true || col.unique === true || leading.has(col.name)
       ? { indexed: true } : {}),
+    ...(col.query_rank && col.query_rank !== 'normal' ? { rank: col.query_rank } : {}),
   };
 }
 
 /**
- * The same fields, with the ones the database can order cheaply on top — the
- * key first, then the indexed columns, then the rest in their own order.
+ * The same fields for the order combo: by `query_rank` first, and within a
+ * rank the ones the database can order cheaply on top — the key, then the
+ * indexed columns, then the rest in their own order.
  */
 export function orderFields(fields: FilterField[]): FilterField[] {
-  const rank = (f: FilterField) => (f.pk ? 0 : f.indexed ? 1 : 2);
-  return [...fields].sort((a, b) => rank(a) - rank(b));
+  const cheap = (f: FilterField) => (f.pk ? 0 : f.indexed ? 1 : 2);
+  return [...fields].sort((a, b) => rankWeight(a) - rankWeight(b) || cheap(a) - cheap(b));
 }

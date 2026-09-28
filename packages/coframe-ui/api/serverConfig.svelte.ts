@@ -115,6 +115,9 @@ export type SchemaRegistry = Record<string, Record<string, SchemaFieldInfo>>;
 
 // ── Table schema ─────────────────────────────────────────────────────────────
 
+/** `normal` is the default; `more` sits behind "Show more", `none` is never offered. */
+export type QueryRank = 'top' | 'normal' | 'low' | 'more' | 'none';
+
 export interface TableColumnInfo {
   name: string;
   type?: string;
@@ -131,6 +134,8 @@ export interface TableColumnInfo {
   /** Declared on the column or inherited from its type. */
   index?: boolean;
   unique?: boolean;
+  /** Where the column stands when a query is built (see dataview.fields.ts). */
+  query_rank?: QueryRank;
   foreign_key?: { target: string; field: string };
   [key: string]: unknown;
 }
