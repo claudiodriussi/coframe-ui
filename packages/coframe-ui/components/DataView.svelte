@@ -37,6 +37,7 @@
   } from './dataview.query';
   import type { QueryExtras, OrderSpec } from './dataview.query';
   import type { RuleRow } from './dataview.rules';
+  import { takeRestorable, remember } from './dataview.session';
   import RuleEditorView from './RuleEditorView.svelte';
 
   // ── Types (re-exported for consumers) ─────────────────────────────────────
@@ -96,27 +97,15 @@
   } = $props();
 
   // ── View state persistence (key + initial load) ────────────────────────────
-  // Two-level persistence model:
-  //   - reload (F5)     → restore full session state (filters, sort, selections, rowCount)
-  //   - navigate (menu) → start fresh (savedState = null)
+  // A view opens from its descriptor. The one exception is the view the user
+  // was on when the page reloaded, which comes back as it was — once, in this
+  // window only (dataview.session.ts).
 
   function getStateKey(): string {
-    return `dataview.${view.source?.model ?? (view.source as any)?.endpoint ?? 'custom'}`;
+    return String(view.source?.model ?? (view.source as any)?.endpoint ?? 'custom');
   }
 
-  const isReload = (() => {
-    try {
-      const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
-      return nav?.type === 'reload';
-    } catch { return false; }
-  })();
-
-  const savedState: SavedViewState | null = (() => {
-    try {
-      if (!isReload) return null;
-      return JSON.parse(localStorage.getItem(getStateKey()) ?? 'null') as SavedViewState;
-    } catch { return null; }
-  })();
+  const savedState = takeRestorable<SavedViewState>(getStateKey());
 
   // ── Internal state ─────────────────────────────────────────────────────────
 
@@ -149,6 +138,9 @@
   // never read here. Part of the chosen set, so it restarts the fetch like a
   // rule does, and goes fresh on open like everything else.
   let queryParams = $state<Record<string, unknown>>(savedState?.params ?? {});
+  // A header click sorts what is loaded, locally; Tabulator keeps it, so it is
+  // followed here only to know whether there is something to reset.
+  let gridSorted = $state(false);
   let filteredCount = $state<number | null>(null);
   let selectedCount = $state(0);
   let tabulatorReady = $state(false);
@@ -246,7 +238,7 @@
       order: userOrder,
       params: queryParams,
     };
-    try { localStorage.setItem(getStateKey(), JSON.stringify(state)); } catch (_) {}
+    remember(getStateKey(), state);
   }
 
   // Restore effect — runs once as soon as tabulatorReady.
@@ -509,8 +501,10 @@
           await tableRef.addRows(newData);
         }
       }
-    } catch (_e) {
-      // loadMore errors are non-fatal — existing data remains intact
+    } catch (e) {
+      // Non-fatal — the rows already loaded stay — but never silent: a
+      // "Load all" that does nothing must leave a trace somewhere.
+      console.error('[DataView] load more failed', e);
     } finally {
       loadingMore = false;
       saveViewState();
@@ -528,9 +522,42 @@
 
   // ── Toolbar / export actions ───────────────────────────────────────────────
 
+  // The CSV of what the grid holds is opt-in (`show: [export]`): the export
+  // worth having — ticked rows, richer columns, xlsx — is the server's to do.
+  const exportShown = $derived(
+    (navigatorConfig?.show ?? []).includes('export')
+    && !(navigatorConfig?.hide ?? []).includes('export'),
+  );
+
   function handleExport() {
+    if (!exportShown) return;
     const name = (view.source?.model ?? view.title ?? 'export').toLowerCase();
     tableRef?.download('csv', `${name}.csv`);
+  }
+
+  /** Whether the view differs from how it opens — what "Reset view" would undo. */
+  const viewChanged = $derived(
+    ruleRows.length > 0 || quickSearch !== '' || userOrder.length > 0
+    || Object.keys(queryParams).length > 0 || filterMode || gridSorted || selectMode,
+  );
+
+  /**
+   * Back to the view as declared: the chosen set, the order, the command's
+   * parameters (an archive view goes back to the active rows), and what was done
+   * on the grid itself — column filters, header sort, the tick column.
+   */
+  function resetView() {
+    tableRef?.clearHeaderFilter();
+    filterMode = false;
+    tableRef?.clearSort();
+    gridSorted = false;
+    selectMode = false;
+    changeSet(() => {
+      ruleRows = [];
+      quickSearch = '';
+      userOrder = [];
+      queryParams = {};
+    });
   }
 
   function toggleFilter() {
@@ -891,6 +918,7 @@
   }
 
   function handleSorted() {
+    gridSorted = (tableRef?.getSorters().length ?? 0) > 0;
     saveViewState();
   }
 
@@ -929,6 +957,8 @@
       onExport={handleExport}
       onRefresh={reloadData}
       onLoadMore={loadMore}
+      canReset={viewChanged}
+      onReset={resetView}
       searchable={quickSearchAvailable}
       searchValue={quickSearch}
       onSearch={handleSearch}

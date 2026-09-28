@@ -88,7 +88,11 @@
     // Track `data` unconditionally before the null guard so Svelte registers
     // the dependency even when cfTable is not yet initialised.
     const _data = data;
-    cfTable?.setData(_data);
+    // The rows are handed over, not watched: setData copies every field of
+    // every row, and inside the effect those reads would make each of them a
+    // dependency — any later touch to a row would replace the table with the
+    // array it was first given, throwing away what "Load more" had appended.
+    untrack(() => cfTable?.setData(_data));
   });
 
   $effect(() => {

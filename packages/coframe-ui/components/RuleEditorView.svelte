@@ -16,7 +16,7 @@
    * is changing the set one is looking at.
    */
   import { getContext } from 'svelte';
-  import { ArrowLeft, Check, Plus, CopyPlus, X, Search, ArrowUpDown } from 'lucide-svelte';
+  import { ArrowLeft, Check, Plus, CopyPlus, X, Search, ArrowUpDown, Eraser } from 'lucide-svelte';
   import { _, _t } from '../i18n';
   import { stack as globalStack } from '$coframe/stack/stack.svelte';
   import type { StackInstance } from '$coframe/stack/stack.svelte';
@@ -25,7 +25,7 @@
   import type { OrderSpec } from './dataview.query';
   import { filterFields, orderFields, type FilterField } from './dataview.fields';
   import {
-    OPERATOR_ARITY, OPERATOR_WORD, operatorsFor, blockConflicts, blockRowIndices,
+    OPERATOR_ARITY, OPERATOR_WORD, operatorsFor, blockConflicts, blockRowIndices, isComplete,
     type RuleRow, type RuleOperator, type ConflictReason,
   } from './dataview.rules';
 
@@ -168,6 +168,16 @@
     rows = next;
   }
 
+  /**
+   * Everything back to the view as it opens, in the draft: no conditions, no
+   * quick search, the view's own order. Apply makes it so, Escape keeps what was.
+   */
+  function clearAll() {
+    rows = [];
+    searchText = '';
+    orderField = '';
+  }
+
   function toggleJoin(i: number) {
     rows[i].join = rows[i].join === 'or' ? 'and' : 'or';
   }
@@ -197,8 +207,13 @@
   // ── Exit ───────────────────────────────────────────────────────────────────
 
   function apply() {
+    // Only complete conditions leave: the query ignores the others anyway, and
+    // carried back they would keep the view looking filtered — the row the
+    // editor offers to fill is not a condition until it has a value.
+    const kept = rows.filter(r => r.rule.field && isComplete(r.rule));
+    if (kept.length > 0) kept[0] = { ...kept[0], join: 'and' };
     onApply({
-      rules: rows.filter(r => r.rule.field),
+      rules: kept,
       order: orderField ? [{ field: orderField, dir: orderDir }] : undefined,
       search: searchText,
     });
@@ -365,6 +380,9 @@
       </button>
       <button class="cf-re-btn" onclick={addAlternative} title={_('Duplicates this block as an alternative')}>
         <CopyPlus size={13} /> {_('Add alternative')}
+      </button>
+      <button class="cf-re-btn" onclick={clearAll} title={_('Conditions, search and order back to the view (Apply to confirm)')}>
+        <Eraser size={13} /> {_('Clear all')}
       </button>
     </div>
 

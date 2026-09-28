@@ -71,6 +71,7 @@
   export function clearHeaderFilter()                                          { tableRef?.clearHeaderFilter(); }
   export function setHeaderFilter(field: string, value: unknown)               { tableRef?.setHeaderFilter(field, value); }
   export function setSort(sorters: Array<{ field: string; dir: string }>)      { tableRef?.setSort(sorters); }
+  export function clearSort()                                                  { tableRef?.clearSort(); }
   export function selectRowsByIds(ids: unknown[])                              { tableRef?.selectRowsByIds(ids); }
   export function clearSelection()                                             { tableRef?.clearSelection(); }
   export function download(format: 'csv' | 'json', filename: string)          { tableRef?.download(format, filename); }

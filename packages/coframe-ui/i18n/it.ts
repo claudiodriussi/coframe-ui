@@ -44,6 +44,8 @@ registerTranslations('it', {
   'Load more':                'Carica altri',
   'Load {n} rows':            'Carica {n} righe',
   'Load all':                 'Carica tutto',
+  'Reset view':               'Ripristina la vista',
+  'View':                     'Vista',
 
   // dataview actions
   'Edit':                     'Modifica',
@@ -80,6 +82,9 @@ registerTranslations('it', {
   '· can be sorted cheaply':  '· ordinabile senza costo',
   'Add condition':            'Aggiungi condizione',
   'Add alternative':          'Aggiungi alternativa',
+  'Clear all':                'Svuota',
+  'Conditions, search and order back to the view (Apply to confirm)':
+    'Condizioni, ricerca e ordinamento tornano quelli della vista (Applica per confermare)',
   'Duplicates this block as an alternative': 'Duplica questo blocco come alternativa',
   'Remove condition':         'Togli la condizione',
   'Field':                    'Campo',

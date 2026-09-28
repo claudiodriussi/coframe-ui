@@ -52,6 +52,9 @@
     onExport = undefined as (() => void) | undefined,
     onRefresh = undefined as (() => void) | undefined,
     onLoadMore = undefined as ((n: number) => void) | undefined,
+    // Back to the view as declared; `canReset` says there is something to undo.
+    canReset = false,
+    onReset = undefined as (() => void) | undefined,
     onCommand = undefined as ((cmd: CommandItem) => void) | undefined,
     // Quick search — the everyday gesture, so it lives in the row that already
     // exists rather than in one of its own (querybuilder.md §7).
@@ -83,6 +86,8 @@
     onExport?: () => void;
     onRefresh?: () => void;
     onLoadMore?: (n: number) => void;
+    canReset?: boolean;
+    onReset?: () => void;
     onCommand?: (cmd: CommandItem) => void;
     searchable?: boolean;
     searchValue?: string;
@@ -95,15 +100,17 @@
 
   const mode = $derived(config?.mode ?? 'browser');
 
-  // Default visible buttons per mode
+  // Default visible buttons per mode. `export` is in none of them: the CSV of
+  // what the grid holds is opt-in (`show: [export]`) while the real export —
+  // ticked rows, richer columns, xlsx — waits for the server.
   const MODE_DEFAULTS: Record<string, Set<string>> = {
-    browser:  new Set(['add', 'edit', 'delete', 'select', 'filter', 'search', 'export']),
+    browser:  new Set(['add', 'edit', 'delete', 'select', 'filter', 'search']),
     lookup:   new Set(['add', 'edit', 'delete', 'accept', 'cancel', 'filter', 'search']),
     batch:    new Set(['edit', 'accept', 'cancel', 'select', 'filter']),
     // The rows are a buffer, not a set the user chose: nothing to search or
     // re-query, and the count is what the grid already shows.
     buffered: new Set(['add', 'edit', 'delete']),
-    readonly: new Set(['filter', 'search', 'export']),
+    readonly: new Set(['filter', 'search']),
   };
 
   const visibleSet = $derived.by(() => {
@@ -141,8 +148,14 @@
   const hasSel = $derived(selectedCount > 0);
 
   // ── Load more dropdown ─────────────────────────────────────────────────────
+  // Also the home of "Reset view", so it stays where a queried view is even
+  // when every row is loaded. A buffered view holds no query to reset.
 
   let loadMoreOpen = $state(false);
+  const showReset = $derived(!!onReset && mode !== 'buffered');
+  const showPaging = $derived(
+    (hasMore || loadingMore || showReset) && !(config?.hide ?? []).includes('load_more'),
+  );
 
   // ── Quick search ───────────────────────────────────────────────────────────
   // Typing is local: the query leaves on Enter, never while typing. Every
@@ -343,12 +356,13 @@
       </button>
     {/if}
 
-    <!-- Load More (auto — visible if hasMore/loadingMore AND not in hide list) -->
-    {#if (hasMore || loadingMore) && !(config?.hide ?? []).includes('load_more')}
+    <!-- Paging menu (auto — load more when there is more, and Reset view) -->
+    {#if showPaging}
       <div class="cf-nav-loadmore-wrap">
         <button
           class="cf-nav-btn cf-nav-loadmore-btn"
-          title={_('Load more')}
+          class:cf-nav-btn-active={canReset}
+          title={hasMore ? _('Load more') : _('View')}
           onclick={() => (loadMoreOpen = !loadMoreOpen)}
           disabled={loadingMore}
         >
@@ -361,17 +375,27 @@
 
         {#if loadMoreOpen}
           <div class="cf-nav-loadmore-menu" role="menu">
-            {#each LOAD_MORE_OPTIONS as n (n)}
+            {#if hasMore}
+              {#each LOAD_MORE_OPTIONS as n (n)}
+                <button class="cf-nav-menu-item" role="menuitem"
+                  onclick={() => { loadMoreOpen = false; onLoadMore?.(n); }}>
+                  {_t('Load {n} rows', { n })}
+                </button>
+              {/each}
+              <div class="cf-nav-menu-sep" role="separator"></div>
               <button class="cf-nav-menu-item" role="menuitem"
-                onclick={() => { loadMoreOpen = false; onLoadMore?.(n); }}>
-                {_t('Load {n} rows', { n })}
+                onclick={() => { loadMoreOpen = false; onLoadMore?.(0); }}>
+                {_('Load all')}
               </button>
-            {/each}
-            <div class="cf-nav-menu-sep" role="separator"></div>
-            <button class="cf-nav-menu-item" role="menuitem"
-              onclick={() => { loadMoreOpen = false; onLoadMore?.(0); }}>
-              {_('Load all')}
-            </button>
+            {/if}
+            {#if showReset}
+              {#if hasMore}<div class="cf-nav-menu-sep" role="separator"></div>{/if}
+              <button class="cf-nav-menu-item" role="menuitem"
+                disabled={!canReset}
+                onclick={() => { loadMoreOpen = false; onReset?.(); }}>
+                {_('Reset view')}
+              </button>
+            {/if}
           </div>
         {/if}
       </div>
