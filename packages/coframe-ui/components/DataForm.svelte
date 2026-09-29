@@ -198,6 +198,14 @@
   // indistinguishable from a broken one.
   let isEditable = $derived(policy.editable !== false);
 
+  // Columns the model declares `editable: false`. The model says what can be
+  // edited at all; a descriptor can only restrict that, never widen it.
+  let lockedColumns = $derived.by(() => {
+    const model = view.source?.model;
+    const table = model ? serverConfig.tables[model] : undefined;
+    return new Set((table?.columns ?? []).filter((c) => c.editable === false).map((c) => c.name));
+  });
+
   // All leaf FormFields — from layout tree or legacy flat list.
   // A hidden field is not merely invisible: it is not the form's business at all,
   // so it is out of validation and out of the payload too.
@@ -958,7 +966,7 @@
 
 <!-- ── Field content snippet ────────────────────────────────────────────── -->
 {#snippet fieldContent(field: FormField)}
-  {@const fieldReadonly = !isEditable || field.readonly === true}
+  {@const fieldReadonly = !isEditable || field.readonly === true || lockedColumns.has(field.name)}
   {@const error = errors[field.name]}
   {@const widgetType = resolveWidget(field)}
 
