@@ -45,3 +45,27 @@ describe('the plugin roots', () => {
     expect(() => resolved()).toThrow(/a plugin root is a path/);
   });
 });
+
+describe('where the client is mounted', () => {
+  it('is the root when coframe is the application', () => {
+    anApp('plugins: [plugins]\n');
+    expect(resolved().clientBase).toBe('');
+  });
+
+  it('is /admin when coframe is the admin of a host', () => {
+    anApp('client:\n  role: admin\n');
+    expect(resolved().clientBase).toBe('/admin');
+  });
+
+  it('follows base, without the trailing slash SvelteKit refuses', () => {
+    anApp('client:\n  role: admin\n  base: /backoffice/\n');
+    expect(resolved().clientBase).toBe('/backoffice');
+  });
+
+  it('refuses what the server would refuse', () => {
+    anApp('client:\n  role: backoffice\n');
+    expect(() => resolved()).toThrow(/client.role 'backoffice'/);
+    anApp('client:\n  base: admin\n');
+    expect(() => resolved()).toThrow(/must start with '\/'/);
+  });
+});

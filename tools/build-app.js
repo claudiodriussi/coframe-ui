@@ -3,7 +3,7 @@
  * Build the admin client for an application, and put it where its server
  * serves it from.
  *
- *   pnpm build:app /path/to/myapp        →  myapp/static/
+ *   pnpm build:app /path/to/myapp        →  myapp/clientui/
  *   pnpm build:app devtest               →  the app-instance of that name
  *
  * An application does not own a client: it contributes UI through the .svelte
@@ -52,7 +52,8 @@ export function appDirectory(argv) {
 }
 
 /**
- * Build the shell for one application and install it as that app's `static/`.
+ * Build the shell for one application and install it as that app's `clientui/`,
+ * which its server mounts where `client:` in its config.yaml says.
  *
  * The directory is replaced whole rather than merged: a stale chunk from an
  * earlier build is indistinguishable from a current one, and the browser would
@@ -74,7 +75,7 @@ export function buildApp(app, { run = spawnSync } = {}) {
     throw new Error(`the client build failed (exit ${result.status})`);
   }
 
-  const target = resolve(app, 'static');
+  const target = resolve(app, 'clientui');
   rmSync(target, { recursive: true, force: true });
   cpSync(SHELL_BUILD, target, { recursive: true });
   return target;

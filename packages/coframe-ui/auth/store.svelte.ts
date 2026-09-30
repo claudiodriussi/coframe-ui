@@ -17,6 +17,7 @@
 
 import { jwtDecode } from 'jwt-decode';
 import { goto } from '$app/navigation';
+import { base } from '$app/paths';
 import { api } from '../api/client';
 import type { UserContext, LoginCredentials } from '../api/types';
 
@@ -36,7 +37,7 @@ class AuthStore {
         api.logout();
         this.user = null;
         this.error = 'Session expired. Please sign in again.';
-        goto('/');
+        goto(`${base}/`);
       });
     }
   }

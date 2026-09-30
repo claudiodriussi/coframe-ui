@@ -71,6 +71,7 @@ const APP_ROOTS = {
  * @property {string} apiPrefix       API route prefix
  * @property {string} endpointPrefix  dispatcher prefix
  * @property {string} apiBase         backend base URL, the target of the dev proxy
+ * @property {string} clientBase      where the client is mounted: '' for the root, or '/admin'
  */
 
 /**
@@ -174,6 +175,31 @@ export function resolveApp({ app, devPort, overridable = false }) {
     devPort,
     apiPrefix: api.prefix ?? 'coframe',
     endpointPrefix: api.endpoint_prefix ?? 'endpoint',
-    apiBase: `http://localhost:${api.port ?? 8300}`
+    apiBase: `http://localhost:${api.port ?? 8300}`,
+    clientBase: clientBase(config.client, configPath)
   };
+}
+
+/**
+ * Where the client is mounted, from the `client:` section of config.yaml.
+ *
+ * The same rule as coframe.webclient on the server, which mounts what this
+ * builds: `role: app` (the default) is the root, `role: admin` is /admin, and
+ * `base` moves either. SvelteKit wants '' or '/path' with no trailing slash.
+ *
+ * @param {{ role?: string, base?: string } | undefined} section
+ * @param {string} configPath  for the error message
+ * @returns {string}
+ */
+export function clientBase(section, configPath) {
+  const role = section?.role ?? 'app';
+  if (role !== 'app' && role !== 'admin') {
+    throw new Error(`${configPath}: client.role '${role}' is not one of app, admin`);
+  }
+  const given = section?.base ?? (role === 'admin' ? '/admin' : '');
+  const base = given === '/' ? '' : String(given ?? '').replace(/\/+$/, '');
+  if (base && !base.startsWith('/')) {
+    throw new Error(`${configPath}: client.base '${given}' must start with '/'`);
+  }
+  return base;
 }

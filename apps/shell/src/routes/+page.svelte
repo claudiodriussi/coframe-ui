@@ -4,10 +4,11 @@
   // An app with a public part would override this route with its own page.
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { base } from '$app/paths';
   import { authStore } from '$coframe/auth/store.svelte';
 
   onMount(() => {
     authStore.checkAuth();
-    goto(authStore.isAuthenticated ? '/app' : '/login', { replaceState: true });
+    goto(`${base}${authStore.isAuthenticated ? '/app' : '/login'}`, { replaceState: true });
   });
 </script>

@@ -48,8 +48,9 @@ describe('the build', () => {
       mkdirSync(resolve(CLIENT, 'apps/shell/build'), { recursive: true });
       return { status: 0 };
     };
-    buildApp(app, { run });
+    const target = buildApp(app, { run });
 
+    expect(target).toBe(resolve(app, 'clientui'));   // not static/: that is the app's own
     expect(seen.command).toBe('pnpm');
     expect(seen.args).toEqual(['--filter', 'shell', 'build']);
     expect(seen.options.env.COFRAME_APP_ROOT).toBe(app);

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { base } from '$app/paths';
   import { authStore } from '$coframe/auth/store.svelte';
 
   let username = $state('');
@@ -8,13 +9,13 @@
 
   onMount(() => {
     authStore.checkAuth();
-    if (authStore.isAuthenticated) goto('/');
+    if (authStore.isAuthenticated) goto(`${base}/`);
   });
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault();
     const ok = await authStore.login({ username, password });
-    if (ok) goto('/');
+    if (ok) goto(`${base}/`);
   }
 </script>
 

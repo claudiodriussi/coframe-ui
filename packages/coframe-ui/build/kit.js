@@ -33,6 +33,9 @@ export function coframeKit(app) {
       adapter: adapter({
         fallback: 'index.html' // SPA mode: unknown routes → index.html
       }),
+      // Where the server mounts it (client: in config.yaml): the dev server
+      // uses the same path, so a link that works in one works in the other.
+      paths: { base: app.clientBase ?? '' },
       alias
     }
   };
