@@ -206,6 +206,14 @@
     return new Set((table?.columns ?? []).filter((c) => c.editable === false).map((c) => c.name));
   });
 
+  // Columns the server never sends back (a password): what was typed must not
+  // stay on screen after saving, nor go out again with the next save.
+  let secretColumns = $derived.by(() => {
+    const model = view.source?.model;
+    const table = model ? serverConfig.tables[model] : undefined;
+    return (table?.columns ?? []).filter((c) => c.secret).map((c) => c.name);
+  });
+
   // All leaf FormFields — from layout tree or legacy flat list.
   // A hidden field is not merely invisible: it is not the form's business at all,
   // so it is out of validation and out of the payload too.
@@ -679,6 +687,10 @@
         draft = { ...original };
       } else {
         original = { ...draft };
+      }
+      for (const name of secretColumns) {
+        delete original[name];
+        delete draft[name];
       }
       internalStatus = { message: _('Saved'), type: 'success' };
       setTimeout(() => { if (internalStatus?.type === 'success') internalStatus = undefined; }, 3000);
