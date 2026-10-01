@@ -40,10 +40,24 @@
   const inputType = $derived(
     field.primitive === 'number' ? 'number'
     : field.primitive === 'date' ? 'date'
-    : field.primitive === 'datetime' ? 'datetime-local'
     : field.primitive === 'time' ? 'time'
     : 'text',
   );
+
+  // A datetime is a date plus an optional time, never one datetime-local box:
+  // that box is empty until the time is filled too, and a value counts for its
+  // precision on the server: a date alone is the whole day, a time narrows it
+  // to the minute. Composed as an ISO string, '2026-09-29' or '2026-09-29T08:10'.
+  const isDateTime = $derived(field.primitive === 'datetime');
+
+  function splitDateTime(v: unknown): [string, string] {
+    const [d = '', t = ''] = typeof v === 'string' ? v.split('T') : [];
+    return [d, t.slice(0, 5)];
+  }
+
+  function joinDateTime(d: string, t: string): string {
+    return d === '' ? '' : t === '' ? d : `${d}T${t}`;
+  }
 
   const inputClass = $derived(
     field.primitive === 'number' ? 'cf-rv-input cf-rv-num'
@@ -108,6 +122,21 @@
   } as unknown as FormField);
 </script>
 
+{#snippet dateTime(v: unknown, set: (next: string) => void, label: string)}
+  {@const [d, t] = splitDateTime(v)}
+  <input
+    type="date" class="cf-rv-input cf-rv-date"
+    value={d} oninput={(e) => set(joinDateTime((e.target as HTMLInputElement).value, t))}
+    aria-label={label}
+  />
+  <input
+    type="time" class="cf-rv-input cf-rv-time"
+    value={t} disabled={d === ''}
+    oninput={(e) => set(joinDateTime(d, (e.target as HTMLInputElement).value))}
+    aria-label={`${label} (${_('time')})`} title={_('Optional: without a time the whole day counts')}
+  />
+{/snippet}
+
 {#if arity === 'none'}
   <span class="cf-rv-none">—</span>
 
@@ -122,6 +151,10 @@
     <div class="cf-rv-fk cf-rv-fk-half">
       <WidgetFKCombobox value={bounds[1] ?? null} field={fkField} onchange={(v) => setBound(1, v)} />
     </div>
+  {:else if isDateTime}
+    {@render dateTime(bounds[0], (v) => setBound(0, v), _('From'))}
+    <span class="cf-rv-sep">…</span>
+    {@render dateTime(bounds[1], (v) => setBound(1, v), _('To'))}
   {:else}
     <input
       type={inputType} class={inputClass}
@@ -178,6 +211,9 @@
     <option value="false">{_('no')}</option>
   </select>
 
+{:else if isDateTime}
+  {@render dateTime(value, (v) => onchange(v), _('Value'))}
+
 {:else}
   <input
     type={inputType} class={inputClass}
@@ -212,6 +248,8 @@
      the value column, which a lookup needs whole. */
   .cf-rv-num   { width: 7rem; text-align: right; }
   .cf-rv-short { width: 9.5rem; }
+  .cf-rv-date  { width: 8.5rem; }
+  .cf-rv-time  { width: 5.5rem; margin-left: 0.15rem; }
   .cf-rv-text  { width: 100%; max-width: 24rem; }
 
   .cf-rv-sep {

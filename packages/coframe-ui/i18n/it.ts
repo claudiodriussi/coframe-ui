@@ -96,6 +96,8 @@ registerTranslations('it', {
   'To':                       'A',
   'Remove':                   'Togli',
   'Type a value, then Enter': 'Scrivi un valore, poi Invio',
+  'time':                     'ora',
+  'Optional: without a time the whole day counts': 'Facoltativa: senza ora vale il giorno intero',
   'all':                      'tutti',
   'yes':                      'sì',
   'no':                       'no',
