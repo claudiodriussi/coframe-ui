@@ -19,7 +19,10 @@ import { jwtDecode } from 'jwt-decode';
 import { goto } from '$app/navigation';
 import { base } from '$app/paths';
 import { api } from '../api/client';
-import type { UserContext, LoginCredentials } from '../api/types';
+import type { UserContext, LoginCredentials, ContextUpdate } from '../api/types';
+
+/** Today as local YYYY-MM-DD (not UTC), like the server's default op_date. */
+export const localToday = () => new Date().toLocaleDateString('sv-SE');
 
 class AuthStore {
   user = $state<UserContext | null>(null);
@@ -93,6 +96,16 @@ class AuthStore {
     }
   }
 
+  /** Operational date: the one the user chose, otherwise today. */
+  get opDate(): string {
+    return this.user?.op_date ?? localToday();
+  }
+
+  /** The user chose the operational date: it stays until reset to today. */
+  get opDateChosen(): boolean {
+    return this.user?.op_date != null;
+  }
+
   logout(): void {
     api.logout();
     this.user = null;
@@ -103,7 +116,7 @@ class AuthStore {
    * Switch context (e.g. change tenant).
    * Requests a new JWT from the server with the updated payload.
    */
-  async updateContext(context: Partial<UserContext>): Promise<boolean> {
+  async updateContext(context: ContextUpdate): Promise<boolean> {
     try {
       const res = await api.updateContext(context);
       if (res.status === 'success' && res.token) {

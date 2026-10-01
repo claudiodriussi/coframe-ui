@@ -9,8 +9,8 @@ export interface UserContext {
   email: string;
   is_active: boolean;
   is_admin: boolean;
-  // Operational ("working") date (YYYY-MM-DD) — framework context field, always
-  // present. Default = server system date at login; overridable via updateContext.
+  // Operational ("working") date (YYYY-MM-DD), present only when the user chose
+  // one via updateContext; absent = today (authStore.opDate).
   op_date?: string;
   // Multi-tenancy (optional — only present when multi_tenant.enabled)
   tenant_id?: number;
@@ -19,6 +19,9 @@ export interface UserContext {
   // into the JWT payload, so wizard state, UI preferences, etc. can be stored here.
   [key: string]: unknown;
 }
+
+/** Fields sent to update_context; null removes the field from the context. */
+export type ContextUpdate = { [K in keyof UserContext]?: UserContext[K] | null };
 
 export interface LoginCredentials {
   username: string;

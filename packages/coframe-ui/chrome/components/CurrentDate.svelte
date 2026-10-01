@@ -1,19 +1,13 @@
 <script lang="ts">
   import { authStore } from '$coframe/auth/store.svelte';
 
-  // Operational ("working") date. It's a framework context field baked into the
-  // JWT (default = server system date at login). Changing it here reissues the
-  // token via updateContext, so every endpoint sees the new op_date via the
-  // context — e.g. default date for new records, accounting-period selection.
-  //
-  // Seam: "today" is compared against the client-local date; the badge for an
-  // overridden date is a heuristic until the server exposes its own today.
+  // Operational ("working") date. It follows today until the user picks one;
+  // picking reissues the token via updateContext with op_date, so every
+  // endpoint sees it in the context (default date for new records,
+  // accounting-period selection). Reset sends null: back to following today.
 
-  // Local YYYY-MM-DD (not UTC), to match the server's date.today() default.
-  const today = () => new Date().toLocaleDateString('sv-SE');
-
-  const opDate = $derived(authStore.user?.op_date ?? today());
-  const isOverridden = $derived(opDate !== today());
+  const opDate = $derived(authStore.opDate);
+  const isOverridden = $derived(authStore.opDateChosen);
 
   let editing = $state(false);
   let draft = $state('');
@@ -39,7 +33,7 @@
   }
 
   async function resetToday() {
-    if (isOverridden) await authStore.updateContext({ op_date: today() });
+    if (isOverridden) await authStore.updateContext({ op_date: null });
   }
 
   // Focus + open the native picker as soon as the input mounts (attachment).

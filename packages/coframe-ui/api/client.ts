@@ -13,7 +13,7 @@ import axios from 'axios';
 import type { AxiosInstance, AxiosError } from 'axios';
 import { config } from '../config';
 import { statusBar } from '../status/statusBar.svelte';
-import type { LoginCredentials, AuthResponse, APIResponse, UserContext } from './types';
+import type { LoginCredentials, AuthResponse, APIResponse, ContextUpdate } from './types';
 
 const TOKEN_KEY = 'coframe_token';
 const TIMEOUT = 10000;
@@ -102,7 +102,7 @@ class CoframeAPI {
    * Switch context (e.g. change tenant).
    * The server validates the request and returns a new JWT with updated payload.
    */
-  async updateContext(context: Partial<UserContext>): Promise<AuthResponse> {
+  async updateContext(context: ContextUpdate): Promise<AuthResponse> {
     try {
       const res = await this.client.post<any>('/auth/update_context', context);
       const d = res.data;

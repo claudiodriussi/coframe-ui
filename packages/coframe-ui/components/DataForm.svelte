@@ -383,7 +383,7 @@
   // Tokens the client can resolve from context. Anything else is server
   // territory and must be `deferred`.
   const CONTEXT_TOKENS: Record<string, () => unknown> = {
-    op_date: () => authStore.user?.op_date,
+    op_date: () => authStore.opDate,
   };
 
   function resolveToken(raw: string): { set: boolean; value?: unknown } {
