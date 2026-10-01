@@ -14,7 +14,7 @@ import { coframePluginGlobs } from './plugin-globs.js';
  * @returns {import('vite').UserConfigFnObject}  pass to defineConfig()
  */
 export function coframeVite(app) {
-  return ({ mode }) => {
+  return ({ mode, command }) => {
     // Two layers: `.env.<mode>` holds what is shared (development/production),
     // `.env.<app>` what belongs to one app-instance and wins. Both are optional
     // — they exist to override the values derived from the backend config.yaml.
@@ -39,6 +39,11 @@ export function coframeVite(app) {
     process.env.VITE_API_BASE_URL = apiBase;
     process.env.VITE_API_PREFIX = apiPrefix;
     process.env.VITE_API_ENDPOINT_PREFIX = endpointPrefix;
+    // The host's login and logout pages are not under the API prefix, so the
+    // proxy does not reach them: in dev the client links them on the
+    // backend's own address. A build is served by the host, and links them
+    // relative. The host's cookie is the same on both ports of localhost.
+    process.env.VITE_HOST_ORIGIN = command === 'serve' ? app.apiBase : '';
 
     return {
       plugins: [tailwindcss(), sveltekit(), coframePluginGlobs(app)],

@@ -4,9 +4,12 @@
  * Usage:
  *   import { authStore } from '$coframe/auth/store.svelte';
  *
- *   authStore.checkAuth()           // call in onMount to restore session from token
+ *   await authStore.start()         // in onMount of a guard: true = signed in
+ *   authStore.toLogin()             // to the login page: the client's or the host's
+ *   authStore.leave()               // sign out, through the host's logout if any
+ *   authStore.checkAuth()           // restore the saved token only (playground)
  *   await authStore.login(creds)    // returns true on success
- *   authStore.logout()
+ *   authStore.logout()              // forget the token, stay here
  *   await authStore.updateContext({ tenant_prefix: 'test' })
  *
  *   authStore.user                  // UserContext | null
@@ -19,6 +22,8 @@ import { jwtDecode } from 'jwt-decode';
 import { goto } from '$app/navigation';
 import { base } from '$app/paths';
 import { api } from '../api/client';
+import { config } from '../config';
+import { hostPage, nextOf, startToken, type ClientInfo } from './host';
 import type { UserContext, LoginCredentials, ContextUpdate } from '../api/types';
 
 /** Today as local YYYY-MM-DD (not UTC), like the server's default op_date. */
@@ -29,9 +34,15 @@ class AuthStore {
   isAuthenticated = $derived(this.user !== null);
   isLoading = $state(false);
   error = $state<string | null>(null);
+  // The `client` section of /info, read once by start(): who logs people in.
+  client = $state<ClientInfo | null>(null);
+  hostLogin = $derived(this.client?.login ?? null);
 
   constructor() {
     if (typeof window !== 'undefined') {
+      // A 401 the host's session could not cure (see api.setRenewer).
+      api.setRenewer(() => (this.hostLogin ? api.hostToken() : Promise.resolve(null)));
+
       // 401 — session expired or token rejected by server
       window.addEventListener('coframe:unauthorized', () => {
         // Clear the now-invalid token: leaving it in localStorage lets the
@@ -40,9 +51,51 @@ class AuthStore {
         api.logout();
         this.user = null;
         this.error = 'Session expired. Please sign in again.';
-        goto(`${base}/`);
+        if (this.hostLogin) this.toLogin();
+        else goto(`${base}/`);
       });
     }
+  }
+
+  /**
+   * Find out who is signed in, at startup. With a host login (client.login)
+   * the host's session decides through auth/token, whatever token is saved;
+   * otherwise the saved token, as checkAuth(). Call from onMount in a guard.
+   */
+  async start(): Promise<boolean> {
+    this.client ??= await api.clientInfo();
+    const token = await startToken(this.client, {
+      hostToken: () => api.hostToken(),
+      savedToken: () => api.getToken()
+    });
+    if (token) {
+      this._applyToken(token);
+    } else {
+      api.logout();
+      this.user = null;
+    }
+    return this.isAuthenticated;
+  }
+
+  /** To the login page: the host's, coming back here after, or the client's. */
+  toLogin(): void {
+    if (this.hostLogin) {
+      const origin = config.api.hostOrigin;
+      window.location.replace(hostPage(this.hostLogin, origin, nextOf(window.location, origin)));
+    } else {
+      goto(`${base}/login`, { replaceState: true });
+    }
+  }
+
+  /**
+   * Sign out. With a host login the host's session has to end too, or
+   * auth/token would hand a token straight back: through client.logout.
+   */
+  leave(): void {
+    this.logout();
+    const page = this.client?.logout;
+    if (page) window.location.assign(hostPage(page, config.api.hostOrigin));
+    else this.toLogin();
   }
 
   // Decode JWT and update user state (client-side only — no signature check).

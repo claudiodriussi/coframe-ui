@@ -10,16 +10,24 @@
  */
 
 import axios from 'axios';
-import type { AxiosInstance, AxiosError } from 'axios';
+import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { config } from '../config';
 import { statusBar } from '../status/statusBar.svelte';
 import type { LoginCredentials, AuthResponse, APIResponse, ContextUpdate } from './types';
+import type { ClientInfo } from '../auth/host';
 
 const TOKEN_KEY = 'coframe_token';
 const TIMEOUT = 10000;
+// auth/token is asked by the host's cookie, and answers 401 when there is no
+// session: that is an answer for whoever asked, not an expired session.
+const HOST_TOKEN_ROUTE = '/auth/token';
+const AUTH_ROUTES = ['/auth/login', HOST_TOKEN_ROUTE];
 
 class CoframeAPI {
   private client: AxiosInstance;
+  // Renews the token on a 401 (from the host's session); null = no renewal.
+  private renewer: (() => Promise<string | null>) | null = null;
+  private renewing: Promise<string | null> | null = null;
 
   constructor() {
     this.client = axios.create({
@@ -53,8 +61,22 @@ class CoframeAPI {
         }
         return res;
       },
-      (err: AxiosError) => {
-        if (err.response?.status === 401) {
+      async (err: AxiosError) => {
+        const req = err.config as (InternalAxiosRequestConfig & { _coframeRenewed?: boolean }) | undefined;
+        if (err.response?.status === 401 && req && !req._coframeRenewed
+            && this.renewer && !AUTH_ROUTES.includes(req.url ?? '')) {
+          // One more try with a token renewed from the host's session: its
+          // cookie may outlive the JWT, and then nobody needs to log in again.
+          // Requests failing together share one renewal.
+          req._coframeRenewed = true;
+          this.renewing ??= this.renewer().finally(() => (this.renewing = null));
+          const token = await this.renewing;
+          if (token) {
+            req.headers.Authorization = `Bearer ${token}`;
+            return this.client(req);
+          }
+        }
+        if (err.response?.status === 401 && req?.url !== HOST_TOKEN_ROUTE) {
           this.clearToken();
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('coframe:unauthorized'));
@@ -82,7 +104,34 @@ class CoframeAPI {
     localStorage.removeItem(TOKEN_KEY);
   }
 
+  setRenewer(renewer: (() => Promise<string | null>) | null): void {
+    this.renewer = renewer;
+  }
+
   // ── Authentication — dedicated routes (server needs SECRET_KEY for JWT) ──
+
+  /** The `client` section of /info: who logs people in. null when unreadable. */
+  async clientInfo(): Promise<ClientInfo | null> {
+    try {
+      const res = await this.client.get<any>('/info');
+      return res.data?.data?.client ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** A token for the user of the host's session, saved; null without one. */
+  async hostToken(): Promise<string | null> {
+    try {
+      const res = await this.client.post<any>(HOST_TOKEN_ROUTE, {});
+      const token: string | undefined = res.data?.data?.token;
+      if (!token) return null;
+      this.setToken(token);
+      return token;
+    } catch {
+      return null;
+    }
+  }
 
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {

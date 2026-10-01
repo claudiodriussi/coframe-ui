@@ -5,8 +5,8 @@
   import { goto } from '$app/navigation';
   import { authStore } from '$coframe/auth/store.svelte';
 
-  onMount(() => {
-    authStore.checkAuth();
-    goto(authStore.isAuthenticated ? '/app' : '/login', { replaceState: true });
+  onMount(async () => {
+    if (await authStore.start()) goto('/app', { replaceState: true });
+    else authStore.toLogin();
   });
 </script>

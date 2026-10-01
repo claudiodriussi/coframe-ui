@@ -2,6 +2,9 @@ interface CoframeApiConfig {
   baseUrl: string;
   prefix: string;
   endpointPrefix: string;
+  // The backend's address for the host's own pages (client.login/logout): set
+  // in dev only, where the client runs on Vite's port; '' in a build.
+  hostOrigin: string;
 }
 
 export interface CoframeFormDefaults {
@@ -20,6 +23,7 @@ let _config: CoframeConfig = {
     baseUrl:        import.meta.env.VITE_API_BASE_URL        ?? '',
     prefix:         import.meta.env.VITE_API_PREFIX          ?? 'coframe',
     endpointPrefix: import.meta.env.VITE_API_ENDPOINT_PREFIX ?? 'endpoint',
+    hostOrigin:     import.meta.env.VITE_HOST_ORIGIN         ?? '',
   },
   form: {
     toolbar_position: 'top',

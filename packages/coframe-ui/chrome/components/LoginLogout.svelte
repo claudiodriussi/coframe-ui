@@ -1,18 +1,11 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { base } from '$app/paths';
   import { authStore } from '$coframe/auth/store.svelte';
-
-  function logout() {
-    authStore.logout();
-    goto(`${base}/login`);
-  }
 </script>
 
 {#if authStore.isAuthenticated}
-  <button type="button" class="cf-authbtn" onclick={logout}>Logout</button>
+  <button type="button" class="cf-authbtn" onclick={() => authStore.leave()}>Logout</button>
 {:else}
-  <button type="button" class="cf-authbtn" onclick={() => goto(`${base}/login`)}>Login</button>
+  <button type="button" class="cf-authbtn" onclick={() => authStore.toLogin()}>Login</button>
 {/if}
 
 <style>

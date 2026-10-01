@@ -1,7 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
-  import { base } from '$app/paths';
   import { authStore } from '$coframe/auth/store.svelte';
   import { serverConfig } from '$coframe/api/serverConfig.svelte';
   import { loadLocale } from '$coframe/i18n';
@@ -18,9 +16,8 @@
   let ready = $state(false);
 
   onMount(async () => {
-    authStore.checkAuth();
-    if (!authStore.isAuthenticated) {
-      goto(`${base}/login`);
+    if (!(await authStore.start())) {
+      authStore.toLogin();
     } else {
       // Await server config so that reload_all_threshold and page_size are
       // available before any DataView renders. No-op if already loaded.
