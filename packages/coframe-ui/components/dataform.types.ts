@@ -156,6 +156,8 @@ export interface CollectionNode {
   form?: string;
   domain?: unknown;
   defaults?: Record<string, unknown>;
+  /** Initial values of a new row, `$record.x` read from the parent's draft; editable. */
+  prefill?: Record<string, unknown>;
   view?: Record<string, unknown>;
   /** Grid height: a CSS length, or `fill` to take what the container gives. */
   height?: string;

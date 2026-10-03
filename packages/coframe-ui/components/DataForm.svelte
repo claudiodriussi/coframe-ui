@@ -40,6 +40,7 @@
   import type { StackInstance } from '$coframe/stack/stack.svelte';
   import { getContext } from 'svelte';
   import { isDirty, liveRows, type Aggregate, type TreeNode } from './aggregate';
+  import { resolveRecordTokens } from './record';
   import type {
     FormDescriptor, FormField, FormStatus,
     LayoutNode, SectionNode, SectionField, FillerField, ColumnDef,
@@ -538,18 +539,6 @@
     return countOf(node.count, cid);
   }
 
-  /** `$record.x` — a value of the record being edited, read from the live draft. */
-  function resolveRecordTokens(map: Record<string, unknown>): Record<string, unknown> {
-    return Object.fromEntries(
-      Object.entries(map).map(([k, v]) => {
-        if (typeof v === 'string' && v.startsWith('$record.')) {
-          return [k, draft[v.slice('$record.'.length)]];
-        }
-        return [k, v];
-      })
-    );
-  }
-
   /**
    * The descriptor of a frame that shows one collection and nothing else.
    *
@@ -610,7 +599,7 @@
     busyButton = key;
     internalStatus = undefined;
     try {
-      const res = await api.endpoint(node.endpoint!, resolveRecordTokens(node.pass ?? {}));
+      const res = await api.endpoint(node.endpoint!, resolveRecordTokens(node.pass, draft));
       if (res.status === 'success') {
         internalStatus = { message: res.message ?? _('Done'), type: 'success' };
       } else {
@@ -1106,6 +1095,7 @@
           node={node as CollectionNode}
           agg={buffer.agg}
           parent={buffer.node}
+          record={draft}
           readonly={!isEditable}
           fallbackLabel={groupLabel}
         />

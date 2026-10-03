@@ -14,6 +14,7 @@
    *   node    CollectionNode   the layout node: model, fk, row form, view
    *   agg     Aggregate        the tree — its counter hands out temporary ids
    *   parent  TreeNode         the node this collection hangs from
+   *   record  object           the parent's live draft, read by `prefill`
    */
   import { getContext, untrack } from 'svelte';
   import { _ } from '../i18n';
@@ -28,13 +29,15 @@
     liveRows, rowsOf, newRow, attachRow, replaceRow, removeRow, cloneNode,
     type Aggregate, type TreeNode,
   } from './aggregate';
+  import { rowDefaults } from './record';
   import type { CollectionNode } from './dataform.types';
   import type { ViewDescriptor } from './dataview.types';
 
-  let { node, agg, parent, readonly = false, fallbackLabel = undefined }: {
+  let { node, agg, parent, record = {}, readonly = false, fallbackLabel = undefined }: {
     node: CollectionNode;
     agg: Aggregate;
     parent: TreeNode;
+    record?: Record<string, unknown>;
     readonly?: boolean;
     /** The name of what encloses the grid — a tab — when the node carries none. */
     fallbackLabel?: string;
@@ -148,7 +151,8 @@
    * leaves nothing behind. The frame is told which fields the parent supplies:
    * the foreign key always, the key itself while it is still a negative
    * placeholder, because a number the save is about to replace has no business
-   * on screen (§17), and whatever `defaults` stamps.
+   * on screen (§17), and whatever `defaults` stamps. What `prefill` brings from
+   * the parent's draft stays visible: it is a suggestion, not a constraint.
    *
    * The stamped fields are hidden for the same reason the node stamps them: they
    * are the other half of `domain`, so editing one moves the row out of the view
@@ -165,7 +169,7 @@
       // was announcing the table name: it falls back on what encloses the grid.
       title: node.label ?? fallbackLabel ?? node.model,
       buffer: { agg, node: editing },
-      defaults: isNew ? node.defaults : undefined,
+      defaults: isNew ? rowDefaults(node, record) : undefined,
       hideFields: isNew ? [node.fk, pkField, ...stamped] : [node.fk, ...stamped],
       onSaved: () => {
         if (isNew) {
