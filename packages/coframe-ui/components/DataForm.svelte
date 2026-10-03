@@ -42,6 +42,7 @@
   import { isDirty, liveRows, type Aggregate, type TreeNode } from './aggregate';
   import { resolveRecordTokens } from './record';
   import { lookupFilters } from './lookup';
+  import { isDateOnly, withTimeNow, plausibleYear } from './datetime';
   import type {
     FormDescriptor, FormField, FormStatus,
     LayoutNode, SectionNode, SectionField, FillerField, ColumnDef,
@@ -334,6 +335,10 @@
       errors[name] = _('Invalid numeric value');
       return false;
     }
+    if ((wt === 'date' || wt === 'datetime') && !isEmpty && !plausibleYear(value)) {
+      errors[name] = _('Implausible year');
+      return false;
+    }
 
     const { [name]: _dropped, ...rest } = errors;
     errors = rest;
@@ -421,6 +426,14 @@
     // the record, the view that opened the form knows why it is being added.
     applyDefaults(out, src?.defaults as Record<string, unknown> | undefined);
     applyDefaults(out, defaults);
+
+    // A date given to a datetime (`$op_date` on `inizio`) is the day: the time
+    // is the one it is now, so the user corrects minutes instead of typing hours.
+    for (const [k, v] of Object.entries(out)) {
+      if (!isDateOnly(v)) continue;
+      const field = flatFields.find((f) => f.name === k);
+      if (field && resolveWidget(field) === 'datetime') out[k] = withTimeNow(v);
+    }
     return out;
   }
 

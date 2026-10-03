@@ -1,9 +1,11 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { DatePicker } from 'bits-ui';
-  import { parseDate, parseDateTime, type DateValue } from '@internationalized/date';
+  import { _ } from '../../i18n';
+  import { parseDate, type DateValue } from '@internationalized/date';
   import type { FormField } from '../dataform.types';
-  import { popupKeys } from './widget.svelte';
+  import { popupKeys, dispatchEnter } from './widget.svelte';
+  import { parseTime, splitDateTime, joinDateTime } from '../datetime';
 
   type Granularity = 'day' | 'hour' | 'minute' | 'second';
 
@@ -18,23 +20,43 @@
 
   let { value, onchange, onblur, readonly = false, granularity = 'day', field }: Props = $props();
 
+  // A datetime is two inputs: the date in segments, with its calendar, and the
+  // time as free text (`930`, `9.30`). The date then needs no time to be shown:
+  // a default from the operational date arrives with the day already right.
+  const withTime = $derived(granularity !== 'day');
+
   function toDateValue(v: unknown): DateValue | undefined {
-    if (!v || typeof v !== 'string') return undefined;
-    try {
-      return granularity === 'day' ? parseDate(v.slice(0, 10)) : parseDateTime(v.slice(0, 19));
-    } catch { return undefined; }
+    const { date } = splitDateTime(v);
+    if (!date) return undefined;
+    try { return parseDate(date); } catch { return undefined; }
   }
 
   let dateValue = $state<DateValue | undefined>(untrack(() => toDateValue(value)));
+  /** The time as held, seconds included: kept as it was until it is retyped. */
+  let timeFull = $state<string | null>(untrack(() => splitDateTime(value).time));
+  let timeText = $state(untrack(() => (splitDateTime(value).time ?? '').slice(0, 5)));
+  let timeInvalid = $state(false);
 
-  // Sync external value changes
+  /** What this widget would hand back for its own state. */
+  function current(): string | null {
+    const date = dateValue?.toString() ?? null;
+    return withTime ? joinDateTime(date, timeFull) : date;
+  }
+
+  // Sync external value changes; untracked reads, so typing does not loop back.
   $effect(() => {
-    const dv = toDateValue(value);
-    // untrack dateValue so user interactions (open/close picker) don't re-trigger this effect.
-    if (dv?.toString() !== untrack(() => dateValue)?.toString()) {
-      dateValue = dv;
-    }
+    const v = (value as string | null | undefined) ?? null;
+    if (v === untrack(current)) return;
+    const { time } = splitDateTime(v);
+    dateValue = toDateValue(v);
+    timeFull = time;
+    timeText = (time ?? '').slice(0, 5);
+    timeInvalid = false;
   });
+
+  function emit() {
+    onchange(current());
+  }
 
   let open = $state(false);
 
@@ -46,21 +68,41 @@
 
   function handleValueChange(dv: DateValue | undefined) {
     dateValue = dv;
-    onchange(dv ? dv.toString() : null);
-    // bits-ui closes the picker after selection — treat that as blur
+    emit();
+    // bits-ui closes the picker after selection — treat that as blur. Not while
+    // the time is still to be typed: that would call the field incomplete early.
+    if (!withTime || timeFull) onblur?.();
+  }
+
+  function handleTimeInput(e: Event) {
+    timeText = (e.target as HTMLInputElement).value;
+    const { time, valid } = parseTime(timeText);
+    timeInvalid = !valid;
+    if (!valid) return;
+    timeFull = time ? `${time}:00` : null;
+    emit();
+  }
+
+  function handleTimeBlur() {
+    if (!timeInvalid) timeText = (timeFull ?? '').slice(0, 5);
     onblur?.();
   }
 
+  function handleTimeKeys(e: KeyboardEvent) {
+    if (popupKeys(e, { open: () => (open = true) })) return;
+    dispatchEnter(e);
+  }
+
   // Display helpers
-  let displayValue = $derived(
-    dateValue
-      ? new Intl.DateTimeFormat('it-IT', granularity === 'day'
-          ? { day: '2-digit', month: '2-digit', year: 'numeric' }
-          : { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
-              ...(granularity === 'second' ? { second: '2-digit' } : {}) }
-        ).format(new Date(granularity === 'day' ? dateValue.toString() + 'T00:00:00' : dateValue.toString()))
-      : '—'
-  );
+  let displayValue = $derived.by(() => {
+    const v = current();
+    if (!v) return '—';
+    return new Intl.DateTimeFormat('it-IT', withTime
+      ? { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+          ...(granularity === 'second' ? { second: '2-digit' } : {}) }
+      : { day: '2-digit', month: '2-digit', year: 'numeric' }
+    ).format(new Date(withTime ? v.slice(0, 19) : v + 'T00:00:00'));
+  });
 
   const segClass =
     'rounded px-0.5 text-sm tabular-nums caret-transparent ' +
@@ -83,11 +125,12 @@
   <DatePicker.Root
     value={dateValue}
     onValueChange={handleValueChange}
-    {granularity}
+    granularity="day"
     locale="it"
     bind:open
   >
-    <div class="relative">
+    <div class="flex gap-2">
+    <div class="relative min-w-0 flex-1">
       <DatePicker.Input
         class="input flex items-center gap-0.5 pr-9 {field.error ? 'input-error' : ''}"
         onkeydowncapture={handleKeys}
@@ -117,6 +160,23 @@
           <line x1="3" y1="10" x2="21" y2="10"/>
         </svg>
       </DatePicker.Trigger>
+    </div>
+
+    {#if withTime}
+      <input
+        type="text"
+        inputmode="numeric"
+        class="input w-20 shrink-0 tabular-nums {field.error || timeInvalid ? 'input-error' : ''}"
+        placeholder="hh:mm"
+        value={timeText}
+        oninput={handleTimeInput}
+        onblur={handleTimeBlur}
+        onkeydown={handleTimeKeys}
+        title={timeInvalid ? _('Invalid time: 930, 9.30, 9:30') : undefined}
+        aria-label={`${field.label ?? field.name} (${_('time')})`}
+        aria-invalid={timeInvalid}
+      />
+    {/if}
     </div>
 
     <DatePicker.Portal>
