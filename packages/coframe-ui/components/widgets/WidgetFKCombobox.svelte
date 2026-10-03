@@ -19,6 +19,7 @@
   import FKPickerView from '../FKPickerView.svelte';
   import type { FormField } from '../dataform.types';
   import { popupKeys } from './widget.svelte';
+  import { lookupPageId } from '../lookup';
 
   const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
 
@@ -274,7 +275,7 @@
     const _df      = displayField;
     stack.push(
       FKPickerView,
-      { table: _table, title: `Select ${field.label ?? _table}` },
+      { table: _table, page: lookupPageId(field, _table), title: field.label ?? _table },
       (row: unknown) => {
         if (!row || typeof row !== 'object') return;
         const r = row as Record<string, unknown>;
@@ -284,6 +285,8 @@
         currentLabel = String(id);
         query = String(id);
         onchange(id);
+        // As a choice from the list does: the field is validated again.
+        onblur?.();
         // Then replace with the real label (row may lack virtual display fields).
         if (_df) _loadLabel(id, _table, _pkField, _df);
       }
