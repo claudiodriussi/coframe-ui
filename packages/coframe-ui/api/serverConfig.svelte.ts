@@ -179,6 +179,7 @@ export interface DataviewConfig {
 
 export interface ServerConfigData {
   dataview?: DataviewConfig;
+  locale?: string;
   [key: string]: unknown;
 }
 

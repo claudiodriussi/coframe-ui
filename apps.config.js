@@ -154,7 +154,7 @@ export function resolveApp({ app, devPort, overridable = false }) {
   // produce components discovered twice.
   const declared = [
     ...new Set(
-      (config.plugins ?? ['plugins']).map((entry) => {
+      (config.plugins ?? ['plugins']).map((/** @type {string | { path?: unknown }} */ entry) => {
         const given = typeof entry === 'string' ? entry : entry?.path;
         if (typeof given !== 'string') {
           throw new Error(

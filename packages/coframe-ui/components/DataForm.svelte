@@ -1015,7 +1015,9 @@
         onchange={(v) => patch(field.name, v)}
         onblur={() => validateField(field.name)}
         readonly={fieldReadonly}
-        granularity={widgetType === 'datetime' ? ((field.granularity as string) ?? 'minute') : 'day'}
+        granularity={widgetType === 'datetime'
+          ? ((field.granularity as 'hour' | 'minute' | 'second' | undefined) ?? 'minute')
+          : 'day'}
         {field}
       />
     {:else if widgetType === 'time'}

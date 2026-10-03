@@ -118,7 +118,7 @@
   let tableRef: DataViewTable | null = $state(null);
   let rows: unknown[] = $state([]);
   let rowCount = $state(0);
-  let inferredAligns    = $state<Record<string, 'left' | 'right'>>({});
+  let inferredAligns    = $state<Record<string, 'left' | 'right' | 'center'>>({});
   let inferredFormatters = $state<Record<string, string>>({});
   let alignsInferred    = $state(false);
   let totalCount = $state<number | null>(null);
@@ -465,7 +465,7 @@
         const res = await api.endpoint(src.endpoint, params);
         if (res.status === 'success') {
           rows = Array.isArray(res.data) ? res.data : [];
-          const payloadSchema = (res as Record<string, unknown>).schema as Record<string, SchemaFieldInfo> | undefined;
+          const payloadSchema = (res as unknown as Record<string, unknown>).schema as Record<string, SchemaFieldInfo> | undefined;
           if (payloadSchema) {
             _applySchemaHints(payloadSchema);
           } else {

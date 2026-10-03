@@ -1,3 +1,4 @@
+/// <reference path="../tabulator.d.ts" />
 /**
  * CoframeTable — Tabulator wrapper with row-level metadata (_meta).
  *

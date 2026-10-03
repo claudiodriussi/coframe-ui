@@ -27,11 +27,18 @@
   />
 
 {:else if view.type === 'plugin'}
-  <PluginComponent
-    loader={pluginLoader}
-    componentId={view.component as string}
-    {...(view.props as Record<string, unknown> ?? {})}
-  />
+  {#if pluginLoader}
+    <PluginComponent
+      loader={pluginLoader}
+      componentId={view.component as string}
+      {...(view.props as Record<string, unknown> ?? {})}
+    />
+  {:else}
+    <!-- No loader in context: say so rather than fail on it. -->
+    <div class="flex h-full items-center justify-center text-sm text-gray-400">
+      no plugin loader for <code class="mx-1 rounded bg-gray-100 px-1">{view.component}</code>
+    </div>
+  {/if}
 
 {:else if view.type === 'table' || view.type === 'tree'}
   <DataView
