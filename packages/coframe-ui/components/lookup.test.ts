@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { lookupPageId, pickerView } from './lookup';
+import { lookupPageId, pickerView, lookupFilters, filterConditions, filterRules } from './lookup';
 
 describe('lookup page', () => {
   it('is the list of the target table by default', () => {
@@ -41,5 +41,29 @@ describe('picker view', () => {
   it('is null when there is no table to pick from', () => {
     expect(pickerView(null)).toBeNull();
     expect(pickerView({ content: { type: 'form' } })).toBeNull();
+  });
+});
+
+describe('lookup filters', () => {
+  const field = { lookup: { filters: { committente_id: '$record.committente_id', active: true } } };
+
+  it('reads $record from the draft and keeps literals', () => {
+    expect(lookupFilters(field, { committente_id: 5 })).toEqual({ committente_id: 5, active: true });
+  });
+
+  it('drops a condition whose value is still empty', () => {
+    expect(lookupFilters(field, { committente_id: null })).toEqual({ active: true });
+    expect(lookupFilters(field, {})).toEqual({ active: true });
+  });
+
+  it('is empty when the field declares none', () => {
+    expect(lookupFilters({}, { committente_id: 5 })).toEqual({});
+  });
+
+  it('becomes conditions for the drop-down and removable rules for the list', () => {
+    expect(filterConditions({ committente_id: 5 })).toEqual([{ committente_id: 5 }]);
+    expect(filterRules({ committente_id: 5 })).toEqual([
+      { rule: { field: 'committente_id', op: 'eq', value: 5 }, join: 'and' },
+    ]);
   });
 });

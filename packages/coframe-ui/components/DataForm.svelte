@@ -41,6 +41,7 @@
   import { getContext } from 'svelte';
   import { isDirty, liveRows, type Aggregate, type TreeNode } from './aggregate';
   import { resolveRecordTokens } from './record';
+  import { lookupFilters } from './lookup';
   import type {
     FormDescriptor, FormField, FormStatus,
     LayoutNode, SectionNode, SectionField, FillerField, ColumnDef,
@@ -1057,6 +1058,7 @@
         onblur={() => validateField(field.name)}
         readonly={fieldReadonly}
         {field}
+        filters={lookupFilters(field, draft)}
       />
     {:else}
       <WidgetText

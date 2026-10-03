@@ -86,6 +86,8 @@
     collapsed = false,
     data: propData = undefined as unknown[] | undefined,
     focusRowId = undefined as unknown,
+    initialRules = undefined as RuleRow[] | undefined,
+    autofocus = false,
     onEvent = undefined as ((name: string, data: unknown) => void) | undefined,
   }: {
     view: ViewDescriptor;
@@ -93,6 +95,10 @@
     collapsed?: boolean;
     data?: unknown[];
     focusRowId?: unknown;
+    /** Rules the view opens with, which the user can change or reset. */
+    initialRules?: RuleRow[];
+    /** Take the keyboard when the data arrives, on `focusRowId` if loaded. */
+    autofocus?: boolean;
     onEvent?: (name: string, data: unknown) => void;
   } = $props();
 
@@ -129,7 +135,7 @@
   // and drops the selection: a tick means "this row among the ones I am looking
   // at", and that meaning does not survive a different set.
   let quickSearch = $state(savedState?.search ?? '');
-  let ruleRows = $state<RuleRow[]>(savedState?.rules ?? []);
+  let ruleRows = $state<RuleRow[]>(savedState?.rules ?? untrack(() => initialRules) ?? []);
   // Empty means "the order the view opens with": an absolute absence of order
   // is not a state worth expressing, since the server ends every paginated
   // query with the key anyway.
@@ -909,6 +915,11 @@
         // (including the .then that sets cfTable) have completed.
         setTimeout(() => tableRef?.focusRowById(fid), 0);
       }
+      if (autofocus) {
+        // After the row, if any: a row that is not among those loaded leaves the
+        // grid with the keyboard anyway, and the first ArrowDown starts at the top.
+        setTimeout(() => { if (!document.activeElement?.closest('.cf-dataview')) tableRef?.focus(); }, 0);
+      }
     }
   }
 
@@ -1020,6 +1031,7 @@
         onNavDelete={handleNavDelete}
         onNavExport={handleExport}
         onNavRefresh={reloadData}
+        onNavCancel={navigatorMode === 'lookup' ? handleNavLookupCancel : undefined}
       />
     {/if}
   </div>

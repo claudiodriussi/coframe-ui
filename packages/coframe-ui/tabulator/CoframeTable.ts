@@ -395,6 +395,11 @@ export class CoframeTable {
 
   // ── Public API — focus ────────────────────────────────────────────────────
 
+  /** Give the grid the keyboard: ArrowDown then starts from the first row. */
+  focus() {
+    this._container.focus();
+  }
+
   /**
    * Focus the row with the given id: set it as active, scroll into view,
    * focus the container (keyboard nav), emit row_click to update detail panels.

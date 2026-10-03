@@ -126,6 +126,7 @@
   }
 
   export function focusRowById(id: unknown)                                    { cfTable?.focusRowById(id); }
+  export function focus()                                                      { cfTable?.focus(); }
   export function getAdjacentRowId(id: unknown): unknown                       { return cfTable?.getAdjacentRowId(id) ?? null; }
   export async function deleteRow(id: unknown): Promise<void>                  { return cfTable?.deleteRow(id); }
   export function updateRow(id: unknown, data: Record<string, unknown>)        { cfTable?.updateRow(id, data); }

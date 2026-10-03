@@ -19,7 +19,7 @@
   import FKPickerView from '../FKPickerView.svelte';
   import type { FormField } from '../dataform.types';
   import { popupKeys } from './widget.svelte';
-  import { lookupPageId } from '../lookup';
+  import { lookupPageId, filterConditions, filterRules } from '../lookup';
 
   const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
 
@@ -29,9 +29,11 @@
     onblur?: () => void;
     readonly?: boolean;
     field: FormField;
+    /** The search's initial filter, already read from the draft (`lookupFilters`). */
+    filters?: Record<string, unknown>;
   }
 
-  let { value, onchange, onblur, readonly = false, field }: Props = $props();
+  let { value, onchange, onblur, readonly = false, field, filters = {} }: Props = $props();
 
   let fkTarget  = $derived((field.foreign_key as { target?: string; field?: string } | undefined)?.target);
   let fkPkField = $derived((field.foreign_key as { target?: string; field?: string } | undefined)?.field ?? 'id');
@@ -137,6 +139,7 @@
           table: fkTarget,
           select: [fkPkField, df],
           search: q,
+          ...(Object.keys(filters).length ? { filters: { conditions: filterConditions(filters) } } : {}),
           limit: 10,
         },
       });
@@ -275,7 +278,8 @@
     const _df      = displayField;
     stack.push(
       FKPickerView,
-      { table: _table, page: lookupPageId(field, _table), title: field.label ?? _table },
+      { table: _table, page: lookupPageId(field, _table), rules: filterRules(filters),
+        current: value, title: field.label ?? _table },
       (row: unknown) => {
         if (!row || typeof row !== 'object') return;
         const r = row as Record<string, unknown>;
