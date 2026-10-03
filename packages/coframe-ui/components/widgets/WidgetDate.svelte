@@ -3,6 +3,7 @@
   import { DatePicker } from 'bits-ui';
   import { parseDate, parseDateTime, type DateValue } from '@internationalized/date';
   import type { FormField } from '../dataform.types';
+  import { popupKeys } from './widget.svelte';
 
   type Granularity = 'day' | 'hour' | 'minute' | 'second';
 
@@ -34,6 +35,14 @@
       dateValue = dv;
     }
   });
+
+  let open = $state(false);
+
+  // Caught before the segments: on a segment ArrowDown decrements the value, and
+  // Alt+ArrowDown must open the calendar instead.
+  function handleKeys(e: KeyboardEvent) {
+    if (popupKeys(e, { open: () => (open = true) })) e.stopPropagation();
+  }
 
   function handleValueChange(dv: DateValue | undefined) {
     dateValue = dv;
@@ -76,10 +85,12 @@
     onValueChange={handleValueChange}
     {granularity}
     locale="it"
+    bind:open
   >
     <div class="relative">
       <DatePicker.Input
         class="input flex items-center gap-0.5 pr-9 {field.error ? 'input-error' : ''}"
+        onkeydowncapture={handleKeys}
       >
         {#snippet children({ segments })}
           {#each segments as { part, value: segVal }}

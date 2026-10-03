@@ -18,6 +18,7 @@
   import type { StackInstance } from '$coframe/stack/stack.svelte';
   import FKPickerView from '../FKPickerView.svelte';
   import type { FormField } from '../dataform.types';
+  import { popupKeys } from './widget.svelte';
 
   const stack = getContext<StackInstance>('cf:stack') ?? globalStack;
 
@@ -178,9 +179,26 @@
     items[highlighted]?.scrollIntoView({ block: 'nearest' });
   }
 
+  /**
+   * Open the list from the keyboard or the chevron, with or without text. What
+   * the field shows is the current label, not a search: it lists from the start.
+   */
+  function openList() {
+    open = true;
+    highlighted = -1;
+    inputEl?.focus();
+    const q = query.trim() && query !== currentLabel ? query : '';
+    clearTimeout(debounceTimer);
+    _search(q);
+  }
+
   function handleKeydown(e: KeyboardEvent) {
+    if (popupKeys(e, { open: openList, search: openPicker })) return;
+
     if (e.key === 'Escape') {
       e.preventDefault();
+      // An open list takes the key: closing it is not cancelling the form.
+      if (open) e.stopPropagation();
       open = false;
       highlighted = -1;
       query = currentLabel;
@@ -197,10 +215,10 @@
     }
 
     if (!open) {
-      // Open on ArrowDown/Up when closed
+      // Open on ArrowDown/Up when closed, empty field included
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        if (query.trim()) open = true;
+        openList();
       }
       // Enter on closed dropdown with no selection: dispatch df:enter for form focus advance
       if (e.key === 'Enter') {
@@ -318,7 +336,7 @@
       class="absolute right-2 top-1/2 -translate-y-1/2 p-1"
       style="color: var(--cf-text-subtle)"
       onmousedown={(e) => e.preventDefault()}
-      onclick={() => { open = !open; if (open) inputEl?.focus(); }}
+      onclick={() => { if (open) open = false; else openList(); }}
       aria-label={_('Select')}
     >
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

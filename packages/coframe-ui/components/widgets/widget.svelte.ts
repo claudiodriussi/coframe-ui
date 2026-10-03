@@ -36,3 +36,24 @@ export function dispatchEnter(e: KeyboardEvent) {
     );
   }
 }
+
+/**
+ * The keys of a field that opens something, the same on every widget:
+ * F4 (or Alt+ArrowDown, as on native drop-downs) opens what the field shows —
+ * a list, a calendar — and F3 opens the full search where the field has one.
+ * F2 stays free: elsewhere it means "edit this".
+ *
+ * Returns true when a handler took the key. A key the field cannot serve is
+ * left to the browser.
+ */
+export function popupKeys(
+  e: KeyboardEvent,
+  handlers: { open?: () => void; search?: () => void },
+): boolean {
+  const open = e.key === 'F4' || (e.altKey && e.key === 'ArrowDown');
+  const handler = open ? handlers.open : e.key === 'F3' ? handlers.search : undefined;
+  if (!handler) return false;
+  e.preventDefault();
+  handler();
+  return true;
+}

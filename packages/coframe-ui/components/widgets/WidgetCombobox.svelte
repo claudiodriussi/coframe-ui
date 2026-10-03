@@ -3,6 +3,7 @@
   import { _ } from '../../i18n';
   import { Combobox } from 'bits-ui';
   import type { FormField, FormFieldChoice } from '../dataform.types';
+  import { popupKeys } from './widget.svelte';
 
   interface Props {
     value: unknown;                      // raw stored value (e.g. FK id, choice value)
@@ -13,6 +14,8 @@
   }
 
   let { value, onchange, onblur, readonly = false, field }: Props = $props();
+
+  let open = $state(false);
 
   let choices = $derived((field.choices ?? []) as FormFieldChoice[]);
 
@@ -62,6 +65,7 @@
     value={value != null ? String(value) : ''}
     onValueChange={handleValueChange}
     inputValue={query}
+    bind:open
   >
     <div class="relative">
       <Combobox.Input
@@ -69,6 +73,7 @@
         placeholder={field.placeholder as string | undefined ?? _('Select…')}
         oninput={(e) => (query = (e.target as HTMLInputElement).value)}
         onblur={handleInputBlur}
+        onkeydown={(e) => popupKeys(e, { open: () => (open = true) })}
         aria-label={field.label ?? field.name}
       />
       <Combobox.Trigger
