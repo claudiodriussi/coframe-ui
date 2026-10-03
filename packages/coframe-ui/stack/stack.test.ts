@@ -6,7 +6,7 @@
  * there every `push` threw `crypto.randomUUID is not a function`: the menu drew,
  * and no panel would open.
  */
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 
 import { createStack } from './stack.svelte.ts';
@@ -47,5 +47,85 @@ describe('pushing a frame', () => {
 
     const ids = get(stack).map((page) => page.id);
     expect(new Set(ids).size).toBe(2);
+  });
+});
+
+describe('focus across a frame', () => {
+  // Node has no DOM: a document whose focus the test moves by hand is enough.
+  function fakeDom() {
+    const body = { focus: () => {} };
+    const doc = { body, activeElement: body as unknown };
+    const element = (connected = true) => {
+      const el = { isConnected: connected, focus: () => { doc.activeElement = el; } };
+      return el;
+    };
+    Object.defineProperty(globalThis, 'document', { value: doc, configurable: true });
+    return { doc, body, element };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'document');
+    vi.useRealTimers();
+  });
+
+  it('goes back to the widget that opened the frame', () => {
+    vi.useFakeTimers();
+    const { doc, body, element } = fakeDom();
+    const field = element();
+    doc.activeElement = field;
+
+    const stack = createStack();
+    stack.push(Component);
+    doc.activeElement = body;           // the frame took it, and took it away
+    stack.pop();
+    vi.runAllTimers();
+
+    expect(doc.activeElement).toBe(field);
+  });
+
+  it('takes it back from a frame still leaving', () => {
+    vi.useFakeTimers();
+    const { doc, element } = fakeDom();
+    const field = element();
+    const grid = element();             // the picker's grid, alive while it slides out
+    doc.activeElement = field;
+
+    const stack = createStack();
+    stack.push(Component);
+    grid.focus();
+    stack.pop();
+    vi.runAllTimers();
+
+    expect(doc.activeElement).toBe(field);
+  });
+
+  it('leaves it where the caller put it on return', () => {
+    vi.useFakeTimers();
+    const { doc, element } = fakeDom();
+    const field = element();
+    const grid = element();
+    doc.activeElement = field;
+
+    const stack = createStack();
+    stack.push(Component, {}, () => grid.focus());
+    stack.pop();
+    vi.runAllTimers();
+
+    expect(doc.activeElement).toBe(grid);
+  });
+
+  it('does nothing for a widget that is no longer there', () => {
+    vi.useFakeTimers();
+    const { doc, body, element } = fakeDom();
+    const gone = element(false);
+    doc.activeElement = gone;
+
+    const stack = createStack();
+    stack.push(Component);
+    doc.activeElement = body;
+    stack.pop();
+    vi.runAllTimers();
+
+    expect(doc.activeElement).toBe(body);
   });
 });

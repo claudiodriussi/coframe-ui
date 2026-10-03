@@ -4,6 +4,7 @@
  * Usage:
  *   stack.push(Component, props, onReturn?)  → opens a page on top
  *   stack.pop(returnData?)                   → goes back, calls onReturn with data
+ *                                              and gives the focus back (see below)
  *   stack.clear()                            → reset (call in onMount cleanup)
  *   stack.subscribe(...)                     → standard store reactivity
  *
@@ -21,7 +22,33 @@ type StackPage = {
   component: AnyComponent;
   props?: Record<string, unknown>;
   onReturn?: (data?: unknown) => void;
+  /** What had the focus when the frame was opened. */
+  opener?: { focus(): void; isConnected?: boolean } | null;
 };
+
+/**
+ * Coming back, the focus goes where it was: the widget that opened the frame —
+ * a field after "Search more…", a grid row after its form. Only when it was lost
+ * on the way: a caller that moved it on return (`onReturn`, a row focused after
+ * a save) has said where it belongs, and is not overridden. The frames below
+ * stay mounted, so the opener is still there; one that is gone is left alone.
+ */
+function currentFocus(): StackPage['opener'] {
+  if (typeof document === 'undefined') return null;
+  return (document.activeElement as StackPage['opener']) ?? null;
+}
+
+function restoreFocus(opener: StackPage['opener'], leaving: StackPage['opener']): void {
+  if (!opener || typeof document === 'undefined') return;
+  // After the frame below is shown again: hidden, it cannot take the focus.
+  // Lost means on the body, or still where it was when the frame closed: the
+  // frame leaves with a transition, and keeps its focus while it plays.
+  setTimeout(() => {
+    const now = document.activeElement as unknown;
+    const lost = !now || now === document.body || now === leaving;
+    if (lost && opener.isConnected !== false) opener.focus();
+  }, 0);
+}
 
 /**
  * An id for a frame, unique within this page.
@@ -51,7 +78,8 @@ export function createStack() {
       onReturn?: (data?: unknown) => void
     ): string {
       const id = frameId();
-      update((pages) => [...pages, { id, component, props, onReturn }]);
+      const opener = currentFocus();
+      update((pages) => [...pages, { id, component, props, onReturn, opener }]);
       return id;
     },
 
@@ -60,7 +88,9 @@ export function createStack() {
         if (pages.length === 0) return pages;
         const next = [...pages];
         const popped = next.pop();
+        const leaving = currentFocus();
         popped?.onReturn?.(returnData);
+        restoreFocus(popped?.opener, leaving);
         return next;
       });
     },

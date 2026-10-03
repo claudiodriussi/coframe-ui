@@ -77,6 +77,7 @@
         aria-label={field.label ?? field.name}
       />
       <Combobox.Trigger
+        tabindex={-1}
         class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
         aria-label={_('Select')}
       >

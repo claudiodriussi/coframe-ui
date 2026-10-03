@@ -103,7 +103,9 @@
         {/snippet}
       </DatePicker.Input>
 
+      <!-- Tab skips it: the keyboard opens the calendar with F4 -->
       <DatePicker.Trigger
+        tabindex={-1}
         class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand
                focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1 rounded"
         aria-label="Apri calendario"

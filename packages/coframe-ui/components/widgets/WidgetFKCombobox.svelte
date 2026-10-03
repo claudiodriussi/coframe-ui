@@ -337,9 +337,10 @@
       </button>
     {/if}
 
-    <!-- Chevron -->
+    <!-- Chevron: the mouse's way to the list; the keyboard has F4, so Tab skips it -->
     <button
       type="button"
+      tabindex="-1"
       class="absolute right-2 top-1/2 -translate-y-1/2 p-1"
       style="color: var(--cf-text-subtle)"
       onmousedown={(e) => e.preventDefault()}
