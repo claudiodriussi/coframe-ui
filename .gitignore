@@ -7,7 +7,7 @@ node_modules
 .wrangler
 .svelte-kit
 # The compiled site of each client. Narrow on purpose: a bare `build` also
-# matched packages/coframe-ui/build/, which is not output at all — it holds the
+# matched packages/ui/build/, which is not output at all — it holds the
 # vite/kit factories every client imports, so a fresh clone could not build.
 apps/*/build
 

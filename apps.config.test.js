@@ -14,16 +14,16 @@ import { resolveApp } from './apps.config.js';
 
 /** An app-instance holding the given `plugins:` list, reached as an outside app. */
 function anApp(pluginsYaml) {
-  const root = mkdtempSync(resolve(tmpdir(), 'coframe-app-'));
+  const root = mkdtempSync(resolve(tmpdir(), 'kitebase-app-'));
   writeFileSync(resolve(root, 'config.yaml'), `name: sample\n${pluginsYaml}`);
-  process.env.COFRAME_APP_ROOT = root;
+  process.env.KITEBASE_APP_ROOT = root;
   return root;
 }
 
 const resolved = () => resolveApp({ app: 'sample', devPort: 5174, overridable: true });
 
 afterEach(() => {
-  delete process.env.COFRAME_APP_ROOT;
+  delete process.env.KITEBASE_APP_ROOT;
 });
 
 describe('the plugin roots', () => {
@@ -47,12 +47,12 @@ describe('the plugin roots', () => {
 });
 
 describe('where the client is mounted', () => {
-  it('is the root when coframe is the application', () => {
+  it('is the root when kitebase is the application', () => {
     anApp('plugins: [plugins]\n');
     expect(resolved().clientBase).toBe('');
   });
 
-  it('is /admin when coframe is the admin of a host', () => {
+  it('is /admin when kitebase is the admin of a host', () => {
     anApp('client:\n  role: admin\n');
     expect(resolved().clientBase).toBe('/admin');
   });

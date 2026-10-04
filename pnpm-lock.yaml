@@ -15,14 +15,14 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
-  apps/devtest:
+  apps/playground:
     dependencies:
-      '@coframe/ui':
-        specifier: workspace:*
-        version: link:../../packages/coframe-ui
       '@internationalized/date':
         specifier: ^3.11.0
         version: 3.11.0
+      '@kitebase/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       axios:
         specifier: ^1.13.5
         version: 1.13.5
@@ -114,12 +114,12 @@ importers:
 
   apps/shell:
     dependencies:
-      '@coframe/ui':
-        specifier: workspace:*
-        version: link:../../packages/coframe-ui
       '@internationalized/date':
         specifier: ^3.11.0
         version: 3.11.0
+      '@kitebase/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       axios:
         specifier: ^1.13.5
         version: 1.13.5
@@ -209,7 +209,7 @@ importers:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@22.19.11)(jiti@2.6.1)(lightningcss@1.31.1)(yaml@2.9.0)
 
-  packages/coframe-ui:
+  packages/ui:
     dependencies:
       '@internationalized/date':
         specifier: ^3.11.0

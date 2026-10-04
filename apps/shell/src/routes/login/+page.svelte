@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { base } from '$app/paths';
-  import { authStore } from '$coframe/auth/store.svelte';
+  import { authStore } from '$kitebase/auth/store.svelte';
 
   let username = $state('');
   let password = $state('');
@@ -27,7 +27,7 @@
 {#if showForm}
   <div class="flex min-h-screen items-center justify-center bg-gray-50">
     <div class="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-      <h1 class="mb-6 text-2xl font-semibold text-gray-900">Coframe</h1>
+      <h1 class="mb-6 text-2xl font-semibold text-gray-900">Kitebase</h1>
 
       <form onsubmit={handleSubmit} class="space-y-4">
         <div>

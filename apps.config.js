@@ -7,10 +7,10 @@
  *     roots, API prefix, API port — is already declared in its `config.yaml`,
  *     so this file only has to say where that directory is.
  *   - the *client* owns its dev port and declares which app it is bound to,
- *     in its own `coframe.config.js`.
+ *     in its own `kitebase.config.js`.
  *
  * Adding an app costs one line here, or none when it sits at the conventional
- * path `coframe/apps/<name>` where real app-instances live.
+ * path `apps/<name>` where real app-instances live.
  */
 import { existsSync, readFileSync } from 'fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'path';
@@ -30,8 +30,8 @@ const REACH = 3;
  * repository.
  *
  * Which is not the same as counting levels: cloned from GitHub this repository
- * is `<workspace>/coframe-ui`, and in the development workspace it is
- * `<workspace>/client/svelte` — one arrangement of the same siblings, and
+ * is `<workspace>/kitebase-ui`, and in the development workspace it is
+ * `<workspace>/client` — one arrangement of the same siblings, and
  * neither is the right one to hard-code.
  *
  * @param {string} relative  path of an app-instance, relative to a workspace
@@ -48,16 +48,18 @@ function lookUp(relative) {
 }
 
 /**
- * App-instances this repository knows by name. Only devtest is here: it ships
- * inside the coframe checkout, which whoever works on the library has anyway,
- * and `apps/devtest` is a client bound to it. Anything else is found by the
- * convention `coframe/apps/<name>`, or says where it is with COFRAME_APP_ROOT
+ * App-instances this repository knows by name, each with the places it can be:
+ * the library checkout is `server/` in the development workspace and
+ * `kitebase/` when cloned from GitHub. Only devtest is here: it ships inside
+ * that checkout, which whoever works on the library has anyway, and
+ * `apps/playground` is a client bound to it. Anything else is found by the
+ * convention `apps/<name>`, or says where it is with KITEBASE_APP_ROOT
  * — which is how an app in a repository of its own is reached, the commons
  * demo included.
- * @type {Record<string, string>}
+ * @type {Record<string, string[]>}
  */
 const APP_ROOTS = {
-  devtest: 'coframe/devtest'
+  devtest: ['server/devtest', 'kitebase/devtest']
 };
 
 /**
@@ -78,20 +80,24 @@ const APP_ROOTS = {
  * Absolute directory of an app-instance — the one holding its `config.yaml`.
  *
  * Apps of this repository are found by the table above, or by the convention
- * `coframe/apps/<name>`. An app that lives anywhere else says where it is,
- * with COFRAME_APP_ROOT — which is what keeps a symlink into `coframe/apps/`
+ * `apps/<name>`. An app that lives anywhere else says where it is,
+ * with KITEBASE_APP_ROOT — which is what keeps a symlink into `apps/`
  * a convenience for editing both at once, rather than the only way to build.
  *
  * @param {string} app
  */
 export function appRoot(app) {
-  const given = process.env.COFRAME_APP_ROOT;
+  const given = process.env.KITEBASE_APP_ROOT;
   if (given) return resolve(given);
 
-  const relative = APP_ROOTS[app] ?? `coframe/apps/${app}`;
+  const candidates = APP_ROOTS[app] ?? [`apps/${app}`];
+  for (const relative of candidates) {
+    const found = lookUp(relative);
+    if (found) return found;
+  }
   // Not found: name the nearest place it would have been, which is the one
   // worth naming in the error that follows.
-  return lookUp(relative) ?? resolve(CLIENT, '..', relative);
+  return resolve(CLIENT, '..', candidates[0]);
 }
 
 /**
@@ -110,17 +116,17 @@ function isInside(child, parent) {
  * @param {object} client
  * @param {string} client.app          app-instance this client is bound to
  * @param {number} client.devPort      port of this client's dev server
- * @param {boolean} [client.overridable]  honour COFRAME_APP (only the generic shell does)
+ * @param {boolean} [client.overridable]  honour KITEBASE_APP (only the generic shell does)
  * @returns {ResolvedApp}
  */
 export function resolveApp({ app, devPort, overridable = false }) {
-  const requested = process.env.COFRAME_APP;
-  const givenRoot = process.env.COFRAME_APP_ROOT;
+  const requested = process.env.KITEBASE_APP;
+  const givenRoot = process.env.KITEBASE_APP_ROOT;
 
   if ((requested && requested !== app) || givenRoot) {
     if (!overridable) {
       throw new Error(
-        `COFRAME_APP${givenRoot ? '_ROOT' : ''} is set but this client is bound to ` +
+        `KITEBASE_APP${givenRoot ? '_ROOT' : ''} is set but this client is bound to ` +
           `'${app}'. Custom clients target one backend; use apps/shell to switch ` +
           `app-instance.`
       );
@@ -135,11 +141,11 @@ export function resolveApp({ app, devPort, overridable = false }) {
   if (!existsSync(configPath)) {
     throw new Error(
       `App-instance '${app}': no config.yaml at ${configPath}\n` +
-        `This client is bound to '${app}', which lives in the coframe checkout ` +
+        `This client is bound to '${app}', which lives in the kitebase checkout ` +
         `beside this one — looked for up to ${REACH} levels above this ` +
         `repository. To point the shell at an application of your own:\n` +
-        `  COFRAME_APP_ROOT=/path/to/app pnpm --filter shell dev\n` +
-        `or, from that application's directory: coframe dev`
+        `  KITEBASE_APP_ROOT=/path/to/app pnpm --filter shell dev\n` +
+        `or, from that application's directory: kitebase dev`
     );
   }
   const config = parse(readFileSync(configPath, 'utf8')) ?? {};
@@ -173,7 +179,7 @@ export function resolveApp({ app, devPort, overridable = false }) {
     appRoot: root,
     pluginRoots,
     devPort,
-    apiPrefix: api.prefix ?? 'coframe',
+    apiPrefix: api.prefix ?? 'kitebase',
     endpointPrefix: api.endpoint_prefix ?? 'endpoint',
     apiBase: `http://localhost:${api.port ?? 8300}`,
     clientBase: clientBase(config.client, configPath)
@@ -183,7 +189,7 @@ export function resolveApp({ app, devPort, overridable = false }) {
 /**
  * Where the client is mounted, from the `client:` section of config.yaml.
  *
- * The same rule as coframe.webclient on the server, which mounts what this
+ * The same rule as kitebase.webclient on the server, which mounts what this
  * builds: `role: app` (the default) is the root, `role: admin` is /admin, and
  * `base` moves either. SvelteKit wants '' or '/path' with no trailing slash.
  *

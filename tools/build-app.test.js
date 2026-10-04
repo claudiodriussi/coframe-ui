@@ -13,7 +13,7 @@ import { resolve } from 'path';
 import { appDirectory, buildApp, CLIENT } from './build-app.js';
 
 function anApp() {
-  const app = mkdtempSync(resolve(tmpdir(), 'coframe-app-'));
+  const app = mkdtempSync(resolve(tmpdir(), 'kitebase-app-'));
   writeFileSync(resolve(app, 'config.yaml'), 'name: sample\n');
   return app;
 }
@@ -30,11 +30,11 @@ describe('the target', () => {
 
   it('takes a bare word as an app-instance of this repository', () => {
     expect(() => appDirectory(['nosuchapp']))
-      .toThrow(/coframe[/\\]apps[/\\]nosuchapp/);
+      .toThrow(/kitebase[/\\]apps[/\\]nosuchapp/);
   });
 
   it('has to be an application', () => {
-    const notAnApp = mkdtempSync(resolve(tmpdir(), 'coframe-none-'));
+    const notAnApp = mkdtempSync(resolve(tmpdir(), 'kitebase-none-'));
     expect(() => appDirectory([notAnApp])).toThrow(/no config.yaml/);
   });
 });
@@ -53,7 +53,7 @@ describe('the build', () => {
     expect(target).toBe(resolve(app, 'clientui'));   // not static/: that is the app's own
     expect(seen.command).toBe('pnpm');
     expect(seen.args).toEqual(['--filter', 'shell', 'build']);
-    expect(seen.options.env.COFRAME_APP_ROOT).toBe(app);
+    expect(seen.options.env.KITEBASE_APP_ROOT).toBe(app);
     expect(seen.options.cwd).toBe(CLIENT);
   });
 

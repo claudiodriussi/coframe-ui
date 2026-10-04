@@ -32,7 +32,7 @@ export const SHELL_BUILD = resolve(CLIENT, 'apps/shell/build');
  *
  * A path is a path; a bare word is an app-instance this repository knows by
  * name, resolved the same way a client resolves its own binding — so the
- * scripts here can name `devtest` without knowing where the coframe checkout
+ * scripts here can name `devtest` without knowing where the kitebase checkout
  * that holds it sits.
  *
  * @param {string[]} argv  arguments after the script name
@@ -67,7 +67,7 @@ export function buildApp(app, { run = spawnSync } = {}) {
   const result = run('pnpm', ['--filter', 'shell', 'build'], {
     cwd: CLIENT,
     stdio: 'inherit',
-    env: { ...process.env, COFRAME_APP_ROOT: app }
+    env: { ...process.env, KITEBASE_APP_ROOT: app }
   });
 
   if (result.error) throw result.error;
