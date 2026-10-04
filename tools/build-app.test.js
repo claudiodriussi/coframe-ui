@@ -30,7 +30,7 @@ describe('the target', () => {
 
   it('takes a bare word as an app-instance of this repository', () => {
     expect(() => appDirectory(['nosuchapp']))
-      .toThrow(/kitebase[/\\]apps[/\\]nosuchapp/);
+      .toThrow(resolve(CLIENT, '..', 'apps', 'nosuchapp'));
   });
 
   it('has to be an application', () => {
