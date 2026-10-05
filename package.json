@@ -1,7 +1,7 @@
 {
   "name": "kitebase-client-workspace",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.6.0",
   "type": "module",
   "// engines": "the floor vite 7 declares — stated here so a workstation is told, not left to find out",
   "engines": {
