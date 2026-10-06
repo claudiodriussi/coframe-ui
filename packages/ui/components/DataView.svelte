@@ -36,7 +36,7 @@
     buildQuery,
   } from './dataview.query';
   import type { QueryExtras, OrderSpec } from './dataview.query';
-  import type { RuleRow } from './dataview.rules';
+  import { declaredRules, type RuleRow } from './dataview.rules';
   import { takeRestorable, remember } from './dataview.session';
   import RuleEditorView from './RuleEditorView.svelte';
 
@@ -107,8 +107,14 @@
   // was on when the page reloaded, which comes back as it was — once, in this
   // window only (dataview.session.ts).
 
+  // The page is part of the key: two pages on the same table (the home on the
+  // records still to send, the full list) are two views, and one must not
+  // come back with the other's rules after a reload.
+  const pageId = getContext<string | undefined>('kb:page');
+
   function getStateKey(): string {
-    return String(view.source?.model ?? (view.source as any)?.endpoint ?? 'custom');
+    const source = String(view.source?.model ?? (view.source as any)?.endpoint ?? 'custom');
+    return pageId ? `${pageId}:${source}` : source;
   }
 
   const savedState = takeRestorable<SavedViewState>(getStateKey());
@@ -135,7 +141,8 @@
   // and drops the selection: a tick means "this row among the ones I am looking
   // at", and that meaning does not survive a different set.
   let quickSearch = $state(savedState?.search ?? '');
-  let ruleRows = $state<RuleRow[]>(savedState?.rules ?? untrack(() => initialRules) ?? []);
+  let ruleRows = $state<RuleRow[]>(
+    savedState?.rules ?? untrack(() => initialRules ?? declaredRules(view)) ?? []);
   // Empty means "the order the view opens with": an absolute absence of order
   // is not a state worth expressing, since the server ends every paginated
   // query with the key anyway.

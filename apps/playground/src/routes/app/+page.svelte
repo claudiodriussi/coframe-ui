@@ -1,6 +1,6 @@
 <script lang="ts">
-  // TODO: dashboard / home della app
+  // The home: the page the menu declares as `home_page`, empty if none.
+  import HomePage from '$kitebase/chrome/components/HomePage.svelte';
 </script>
 
-<h1 class="text-xl font-semibold text-gray-800">Dashboard</h1>
-<p class="mt-2 text-sm text-gray-400">placeholder</p>
+<HomePage />

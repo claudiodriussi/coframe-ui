@@ -14,6 +14,7 @@
   import { resolveIcon } from './icons';
   import { msgbox } from './msgbox.svelte';
   import { applyResult } from './resultAction';
+  import { home } from '../chrome/home.svelte';
 
   interface MenuNode {
     id: string;
@@ -59,8 +60,9 @@
     try {
       const res = await api.endpoint('get_menu', { id });
       if (res.status === 'success') {
-        const data = res.data as { items?: MenuNode[] };
+        const data = res.data as { items?: MenuNode[]; home_page?: string };
         items = data.items ?? [];
+        home.page = data.home_page ?? null;
         expanded = new Set(collectGroupIds(items));
       } else {
         error = res.message ?? 'Unknown error';
@@ -107,6 +109,9 @@
       running = null;
     }
   }
+
+  // Back home (the logo, the title) nothing in the menu is open any more.
+  $effect(() => stack.subscribe((pages) => { if (pages.length === 0) activeId = null; }));
 
   // Keyed on what it fetches: an effect re-runs whenever anything it read
   // changes, which with spread props includes "the parent re-rendered". Here a

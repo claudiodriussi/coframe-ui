@@ -101,6 +101,12 @@ export interface ViewDescriptor {
   policy?: ViewPolicy;
   tree?: ViewTreeConfig;
   navigator?: boolean | NavigatorConfig;
+  /**
+   * Rules the view opens with, which the user sees in the filter panel and can
+   * change or remove: unlike `source.filters`, a starting point and not a
+   * limit. `[{field: returned_on, op: empty}]`; joined by AND.
+   */
+  rules?: Array<{ field: string; op: string; value?: unknown }>;
   /** List of available view types for the toolbar switcher (e.g. ['table','kanban']). */
   allow_views?: string[];
   data_schema?: string;  // schema ID from plugin schemas: section

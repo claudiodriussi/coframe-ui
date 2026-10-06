@@ -6,6 +6,7 @@
    * the missing link between a menu leaf's `action: stack_push, panel: <id>` and
    * the Stack, which only knows how to push resolved components (docs/pending/menu.md §5).
    */
+  import { setContext } from 'svelte';
   import { api } from '$kitebase/api/client';
   import PanelRenderer from './PanelRenderer.svelte';
 
@@ -14,6 +15,12 @@
   }
 
   let { panelId }: Props = $props();
+
+  // What the views inside know about where they are: their remembered state
+  // is per page, not per table (DataView, getStateKey). A page component lives
+  // for one id: the stack and the home key it by the id they show.
+  // svelte-ignore state_referenced_locally
+  setContext('kb:page', panelId);
 
   let panel = $state<Record<string, unknown> | null>(null);
   let error = $state<string | null>(null);

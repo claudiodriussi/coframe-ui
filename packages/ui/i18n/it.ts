@@ -139,4 +139,7 @@ registerTranslations('it', {
   'Confirm':                  'Conferma',
   'Error':                    'Errore',
   'Close':                    'Chiudi',
+
+  // chrome
+  'Back to home':             'Torna alla home',
 });

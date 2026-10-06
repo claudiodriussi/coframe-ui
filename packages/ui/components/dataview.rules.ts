@@ -128,6 +128,19 @@ export interface RuleRow {
   join: 'and' | 'or';
 }
 
+/**
+ * The rules a view declares it opens with (`rules:` in its YAML), as the rows
+ * the filter panel shows. Undefined when it declares none.
+ */
+export function declaredRules(
+  view: { rules?: Array<{ field: string; op: string; value?: unknown }> },
+): RuleRow[] | undefined {
+  return view.rules?.map(({ field, op, value }) => ({
+    rule: { field, op: op as RuleOperator, ...(value !== undefined ? { value } : {}) },
+    join: 'and' as const,
+  }));
+}
+
 /** Conditions in AND. */
 export type Block = Rule[];
 

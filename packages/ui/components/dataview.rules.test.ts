@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   toBlocks, toRows, blockRowIndices, duplicateBlock, isComplete,
-  serializeRule, serializeRuleSet, operatorsFor, operatorSymbol, blockConflicts,
+  serializeRule, serializeRuleSet, operatorsFor, operatorSymbol, blockConflicts, declaredRules,
   type Rule, type RuleRow,
 } from './dataview.rules';
 
@@ -341,5 +341,19 @@ describe('blockConflicts', () => {
   it('reports the pair it found', () => {
     const found = blockConflicts([r('a', 'eq', 1), r('b', 'eq', 2), r('a', 'eq', 3)]);
     expect(found).toEqual([{ a: 0, b: 2, field: 'a', reason: 'distinct-values' }]);
+  });
+});
+
+describe('declaredRules', () => {
+  it('reads the rules a view opens with as AND rows', () => {
+    expect(declaredRules({ rules: [{ field: 'returned_on', op: 'empty' },
+                                   { field: 'km', op: 'gt', value: 0 }] })).toEqual([
+      { rule: { field: 'returned_on', op: 'empty' }, join: 'and' },
+      { rule: { field: 'km', op: 'gt', value: 0 }, join: 'and' },
+    ]);
+  });
+
+  it('says nothing when the view declares none', () => {
+    expect(declaredRules({})).toBeUndefined();
   });
 });
