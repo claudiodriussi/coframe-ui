@@ -140,6 +140,8 @@
           select: [fkPkField, df],
           search: q,
           ...(Object.keys(filters).length ? { filters: { conditions: filterConditions(filters) } } : {}),
+          // In the order the user reads: by the label, not by the key.
+          order_by: [df],
           limit: 10,
         },
       });
