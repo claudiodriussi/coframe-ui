@@ -350,15 +350,18 @@
       const dot = expr.lastIndexOf('.');
       const table = dot === -1 ? model : expr.slice(0, dot);
       const name = dot === -1 ? expr : expr.slice(dot + 1);
-      const type = table
-        ? serverConfig.tables[table]?.columns.find((col) => col.name === name)?.type
+      const column = table
+        ? serverConfig.tables[table]?.columns.find((col) => col.name === name)
         : undefined;
+      const type = column?.type;
       if (!type) continue;
       const key = extractFieldKey(c.field);
       const align = resolveAlign(type, serverConfig.types);
       if (align) aligns[key] = align;
       const fmt = resolveFormatterByType(type, serverConfig.types);
-      if (fmt && DATE_FORMATS.has(fmt)) formatters[key] = fmt;
+      if (fmt && DATE_FORMATS.has(fmt)) {
+        formatters[key] = fmt === 'datetime' && column?.granularity === 'second' ? 'datetime,second' : fmt;
+      }
     }
     return { aligns, formatters };
   });

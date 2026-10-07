@@ -3,6 +3,8 @@
  *
  * Resolution order for `formatter: name` in column YAML (see resolveFormatter):
  *   1. DATE_FORMATTERS  — built-in kitebase: date, datetime, time
+ *                         (`datetime` shows hours and minutes; `datetime,second`
+ *                         adds the seconds, as `granularity: second` does)
  *   2. formatterRegistry — registered by plugins via formatters.ts files
  *   3. raw string       — passed to Tabulator as built-in formatter name
  *                         (e.g. "star", "progress", "tickCross", "color", ...)
@@ -31,9 +33,19 @@ function _parseDate(val: unknown): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+// A datetime is read to the minute: the seconds are there in the value, and
+// shown only where a column asks for them (`granularity: second`), the same
+// word the form's widget reads.
+function _datetimeText(d: Date, granularity?: string): string {
+  return d.toLocaleString(undefined, {
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+    ...(granularity === 'second' ? { second: '2-digit' } : {}),
+  });
+}
+
 const DATE_FORMATTERS: Record<string, CellFormatter> = {
   date:     (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleDateString()  : String(cell.getValue() ?? ''); },
-  datetime: (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleString()      : String(cell.getValue() ?? ''); },
+  datetime: (cell, params) => { const d = _parseDate(cell.getValue()); return d ? _datetimeText(d, params?.granularity) : String(cell.getValue() ?? ''); },
   time:     (cell) => { const d = _parseDate(cell.getValue()); return d ? d.toLocaleTimeString()  : String(cell.getValue() ?? ''); },
 };
 
@@ -91,7 +103,8 @@ export function resolveFormatter(
   // 1. Built-in date formatters
   const dateFmt = DATE_FORMATTERS[name];
   if (dateFmt) {
-    return { formatter: dateFmt, formatterParams: explicitParams };
+    return { formatter: dateFmt,
+             formatterParams: explicitParams ?? (args[0] ? { granularity: args[0] } : undefined) };
   }
 
   // 2. Plugin registry

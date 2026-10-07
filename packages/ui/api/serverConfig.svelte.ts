@@ -131,6 +131,8 @@ export interface TableColumnInfo {
   default?: unknown;
   /** Deferred default: filled server-side at save, never prefilled in a form. */
   deferred?: boolean;
+  /** A datetime shows hours and minutes; `second` adds the seconds, in lists and forms. */
+  granularity?: 'hour' | 'minute' | 'second';
   /** Declared on the column or inherited from its type. */
   index?: boolean;
   unique?: boolean;
