@@ -26,16 +26,20 @@ export interface ViewSource {
   [key: string]: unknown;
 }
 
+/**
+ * A list column as the YAML writes it: lowercase with underscores, like every
+ * other key. DataView turns it into Tabulator's names (minWidth, hozAlign,
+ * formatterParams), which stay inside the grid.
+ */
 export interface ViewColumn {
   field: string;           // QB select expression or plain field name
   title?: string;
   width?: number | string;
-  minWidth?: number;
-  maxWidth?: number;
-  hozAlign?: 'left' | 'center' | 'right';  // Tabulator native
-  align?: 'left' | 'center' | 'right';      // user-friendly alias for hozAlign
+  min_width?: number;
+  max_width?: number;
+  align?: 'left' | 'center' | 'right';
   formatter?: 'date' | 'datetime' | 'time' | string;
-  formatterParams?: Record<string, unknown>;
+  formatter_params?: Record<string, unknown>;
   visible?: boolean;
   frozen?: boolean;
   [key: string]: unknown;

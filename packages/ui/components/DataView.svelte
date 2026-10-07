@@ -377,20 +377,19 @@
         title: c.title ?? fieldKey,
       };
       if (c.width !== undefined)    def.width = c.width as number | string;
-      if (c.minWidth !== undefined) def.minWidth = c.minWidth;
-      if (c.maxWidth !== undefined) def.maxWidth = c.maxWidth;
-      const align = (c.align as 'left' | 'center' | 'right' | undefined)
-        ?? c.hozAlign
+      if (c.min_width !== undefined) def.minWidth = c.min_width;
+      if (c.max_width !== undefined) def.maxWidth = c.max_width;
+      const align = c.align
         ?? schemaHints.aligns[fieldKey]
         ?? inferredAligns[fieldKey];
       if (align) def.hozAlign = align;
       const rawFmt = c.formatter ?? schemaHints.formatters[fieldKey] ?? inferredFormatters[fieldKey];
       if (rawFmt) {
-        const resolved = resolveFormatter(rawFmt, c.formatterParams);
+        const resolved = resolveFormatter(rawFmt, c.formatter_params);
         def.formatter = resolved.formatter;
         if (resolved.formatterParams) def.formatterParams = resolved.formatterParams;
-      } else if (c.formatterParams) {
-        def.formatterParams = c.formatterParams;
+      } else if (c.formatter_params) {
+        def.formatterParams = c.formatter_params;
       }
       if (c.visible === false) def.visible = false;
       if (c.frozen)            def.frozen = true;
