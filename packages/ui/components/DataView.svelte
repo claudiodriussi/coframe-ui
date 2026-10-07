@@ -330,6 +330,39 @@
     if (schema) _applySchemaHints(schema);
   });
 
+  // ── Hints from the declared types ──────────────────────────────────────────
+  // What a column IS comes from the schema, not from the values: guessing from
+  // the first row leaves a column raw whenever that row has it empty (a date
+  // nobody filled yet), and then every row below is raw too. A view column is
+  // a column of the main table, or `Table.col as alias` through a join; either
+  // way it names a real column with a declared type. Only the date formats are
+  // taken from the type: the other type formatters (`fk_label`, `integer`) are
+  // not all registered, and a number reads fine unformatted.
+
+  const DATE_FORMATS = new Set(['date', 'datetime']);
+
+  const schemaHints = $derived.by(() => {
+    const aligns: Record<string, 'left' | 'right' | 'center'> = {};
+    const formatters: Record<string, string> = {};
+    const model = view.source?.model;
+    for (const c of view.columns ?? []) {
+      const expr = c.field.replace(/\s+as\s+.*$/i, '').trim();
+      const dot = expr.lastIndexOf('.');
+      const table = dot === -1 ? model : expr.slice(0, dot);
+      const name = dot === -1 ? expr : expr.slice(dot + 1);
+      const type = table
+        ? serverConfig.tables[table]?.columns.find((col) => col.name === name)?.type
+        : undefined;
+      if (!type) continue;
+      const key = extractFieldKey(c.field);
+      const align = resolveAlign(type, serverConfig.types);
+      if (align) aligns[key] = align;
+      const fmt = resolveFormatterByType(type, serverConfig.types);
+      if (fmt && DATE_FORMATS.has(fmt)) formatters[key] = fmt;
+    }
+    return { aligns, formatters };
+  });
+
   // ── Column mapping ─────────────────────────────────────────────────────────
 
   const columnDefs = $derived.by((): ColumnDef[] => {
@@ -345,9 +378,10 @@
       if (c.maxWidth !== undefined) def.maxWidth = c.maxWidth;
       const align = (c.align as 'left' | 'center' | 'right' | undefined)
         ?? c.hozAlign
+        ?? schemaHints.aligns[fieldKey]
         ?? inferredAligns[fieldKey];
       if (align) def.hozAlign = align;
-      const rawFmt = c.formatter ?? inferredFormatters[fieldKey];
+      const rawFmt = c.formatter ?? schemaHints.formatters[fieldKey] ?? inferredFormatters[fieldKey];
       if (rawFmt) {
         const resolved = resolveFormatter(rawFmt, c.formatterParams);
         def.formatter = resolved.formatter;
