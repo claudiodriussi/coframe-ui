@@ -28,6 +28,7 @@
   import WidgetBoolean from './widgets/WidgetBoolean.svelte';
   import WidgetCombobox from './widgets/WidgetCombobox.svelte';
   import WidgetFKCombobox from './widgets/WidgetFKCombobox.svelte';
+  import FieldHelp from './widgets/FieldHelp.svelte';
   import { _ } from '../i18n';
   import { serverConfig } from '../api/serverConfig.svelte';
   import { authStore } from '../auth/store.svelte';
@@ -310,6 +311,26 @@
     if (t === 'int' || t === 'float' || t === 'decimal' || t === 'number') return 'number';
     if (field.choices && field.choices.length > 0) return 'combobox';
     return 'text';
+  }
+
+  // ── Field help ─────────────────────────────────────────────────────────────
+  // One open at a time, by field name. F1 on a field opens its help, as in
+  // every desktop program; the keys of whatever widget the field has bubble
+  // up to its container, so no widget needs to know.
+
+  let helpOpen = $state<string | null>(null);
+
+  function fieldKeys(e: KeyboardEvent, field: FormField) {
+    if (e.key === 'F1' && field.help) {
+      e.preventDefault();
+      helpOpen = helpOpen === field.name ? null : field.name;
+    } else if (e.key === 'Escape' && helpOpen === field.name) {
+      // An open help takes the key, as an open drop-down does: closing it is
+      // not cancelling the form.
+      e.preventDefault();
+      e.stopPropagation();
+      helpOpen = null;
+    }
   }
 
   // ── Patch + validation ─────────────────────────────────────────────────────
@@ -985,6 +1006,11 @@
   {@const error = errors[field.name]}
   {@const widgetType = resolveWidget(field)}
 
+  <!-- The field's keys: F1 and Escape for its help, whatever widget it has.
+       `contents`, so the wrapper changes nothing in the layout. -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="contents" onkeydown={(e) => fieldKeys(e, field)}>
+
   <!-- Label (not for boolean — boolean has its own inline label) -->
   {#if widgetType !== 'boolean'}
     <label for="field-{field.name}" class="mb-1 block text-sm font-medium text-gray-700">
@@ -992,6 +1018,7 @@
       {#if field.required && isEditable}
         <span class="ml-0.5 text-danger">*</span>
       {/if}
+      {@render help(field)}
     </label>
   {/if}
 
@@ -1056,6 +1083,7 @@
           {#if field.required && isEditable}
             <span class="ml-0.5 text-danger">*</span>
           {/if}
+          {@render help(field)}
         </span>
       </div>
     {:else if widgetType === 'combobox'}
@@ -1086,11 +1114,20 @@
     {/if}
   </div>
 
-  <!-- Error or help -->
+  <!-- Under the field only the error: the help is on request (FieldHelp) -->
   {#if error}
     <p class="mt-1 text-xs text-danger">{error}</p>
-  {:else if field.help}
-    <p class="mt-1 text-xs text-gray-500">{field.help as string}</p>
+  {/if}
+  </div>
+{/snippet}
+
+{#snippet help(field: FormField)}
+  {#if field.help}
+    <FieldHelp
+      text={field.help as string}
+      label={field.label ?? field.name}
+      bind:open={() => helpOpen === field.name, (v) => (helpOpen = v ? field.name : null)}
+    />
   {/if}
 {/snippet}
 

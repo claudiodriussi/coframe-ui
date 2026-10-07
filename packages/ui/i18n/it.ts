@@ -142,4 +142,8 @@ registerTranslations('it', {
 
   // chrome
   'Back to home':             'Torna alla home',
+
+  // field help
+  'Help':                     'Aiuto',
+  'Help (F1)':                'Aiuto (F1)',
 });
