@@ -2,7 +2,7 @@
   /**
    * DataViewNavigator.svelte — icon-only CRUD toolbar for DataView.
    *
-   * Replaces DataViewToolbar. Derives button visibility from:
+   * Derives button visibility from:
    *   1. Mode defaults (browser / lookup / readonly)
    *   2. + show: [...] from NavigatorConfig
    *   3. - hide: [...] from NavigatorConfig

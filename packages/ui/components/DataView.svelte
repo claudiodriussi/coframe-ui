@@ -4,7 +4,7 @@
    *
    * Orchestrates data loading, state persistence, column mapping and
    * event routing. Rendering is delegated to DataViewTable (table/tree)
-   * and toolbar to DataViewToolbar.
+   * and toolbar to DataViewNavigator.
    *
    * Future view types (kanban, cards, …) will be mounted alongside
    * DataViewTable with class:hidden and activated via activeViewType.
@@ -1110,7 +1110,7 @@
     flex: 1;
   }
 
-  /* Duplicated from DataViewToolbar — used by the restore banner buttons. */
+  /* Restore banner buttons. */
   .kb-dv-btn {
     display: inline-flex;
     align-items: center;

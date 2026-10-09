@@ -2,7 +2,7 @@
  * dataview.types.ts — shared type definitions for DataView and related components.
  *
  * Centralised here to avoid circular imports between DataView.svelte,
- * DataViewToolbar.svelte, DataViewTable.svelte, and dataview.query.ts.
+ * DataViewNavigator.svelte, DataViewTable.svelte, and dataview.query.ts.
  */
 
 export interface ViewSource {
